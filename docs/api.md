@@ -1,20 +1,21 @@
-# Public API and operation contracts — Stage 3 (0.3.0)
+# Public API and operation contracts — Stage 4 (0.4.0)
 
 ## Stability and types
 
 Public namespaces remain `MediaKit-1.0` and `MediaKitGtk-1.0`; SONAME 0 is
-pre-release. Version 0.3.0 is not an ABI-stable production release.
+pre-release. Version 0.4.0 is not an ABI-stable production release.
 
-| Type | Role | Behavior in Stage 3 |
+| Type | Role | Behavior in Stage 4 |
 | --- | --- | --- |
 | `MediaSource` | Local path or file/HTTP(S) URI | Construction does not touch disk/network |
 | `MediaSession` | Per-source playback Facade | Async load, transport, track/chapter control, seek, EOF, errors and buffering |
 | `OpenGlOutput` | GL renderer endpoint | One active renderer per engine, GL-context-affine |
-| `MediaCapabilities` | Verified/unknown output state | Engine availability from build; HDR/audio output unverified |
+| `MediaCapabilities` | Verified/unknown output state | Engine availability from build; native HDR/audio output unverified |
+| `VideoColorInformation` | Typed source-only color/HDR descriptor | mpv `video-params` tokens, luminance and dynamic scene metadata if exposed |
 | `MediaProbe` | Future async media inspection | Still returns `ENGINE_UNAVAILABLE` |
 | `MediaDescription`, `MediaTrack`, `MediaChapter` | Metadata models | Live per-session tracks/chapters (standalone probe still reserved) |
 | `PlaybackOptions` | Audio/HDR/seek policy | Stored only; unsupported advanced choices not silently enabled |
-| `MediaKitGtk.MediaView` | Video display | GTK GLArea + libmpv embedded OpenGL API |
+| `MediaKitGtk.MediaView` | Video display | GTK GLArea + libmpv embedded OpenGL API, optional caller-provided ICC blob |
 | `MediaKitGtk.MediaControls` | Optional controls | Play, pause, stop, seek, video/audio/subtitle selection and chapters |
 
 ## State and events
@@ -62,6 +63,35 @@ pre-release. Version 0.3.0 is not an ABI-stable production release.
 - Before opening a video, realize the `MediaView` so its render context exists.
   If no renderer is present, a headless audio source may still play.
 
+## Stage 4 color and HDR contract
+
+- `MediaSession.video_color` starts UNKNOWN and resets when a source is
+  replaced/closed. `video_color_changed` fires only for changed values. The
+  descriptor records source `primaries`, `transfer`, `matrix`, `color_levels`,
+  `max_cll_nits`, `max_fall_nits`, mastering luminance, HDR10+ scene peak and
+  Dolby Vision profile when libmpv actually exposes them.
+- HDR10 is recognized from PQ transfer; HDR10+ requires *observed* dynamic
+  scene metadata. HLG requires HLG transfer. Dolby Vision requires an observed
+  DV profile or Dolby Vision matrix; no brand detection from filename/codec.
+  Absent metadata remains UNKNOWN, not SDR by assumption.
+- `color_output_target` is `SDR_BT709_BT1886`, expressing the requested mpv
+  target only, not a proven signal from the compositor or monitor.
+  `MediaCapabilities.native_hdr` and `hdr_presentation` are UNVERIFIED.
+- `AUTO` and `TONE_MAP_SDR` use the same conservative SDR target. Setting
+  `options.hdr_policy=PREFER_NATIVE` before `open_async` rejects with
+  `MediaError.UNSUPPORTED` without replacing or opening any source. Changes to
+  mutable options take effect on the next open, not mid-stream.
+- `MediaKitGtk.MediaView.set_display_icc_profile(GLib.Bytes?)` applies a
+  host-provided ICC profile while the GTK GL context is current, or stores it
+  for the next renderer. Null clears it. The native adapter requires a sane
+  ICC header and bounds the blob to 4 MiB. MediaKit does not discover
+  monitor ICC profiles or open untrusted ICC file paths itself.
+- Rendering delegates gamut conversion and SDR tone mapping to libmpv. These
+  options require actual frame and monitor colorimetric qualification before
+  asserting output accuracy. `gpu-next`, full Dolby Vision MEL/FEL, native
+  HDR10/HDR10+ dynamic signaling, monitor EOTF and 10-bit presentation are not
+  enabled by this embedded OpenGL stage.
+
 ## Ownership, cancellation and execution contexts
 
 - `MediaSession` owns the internal playback backend and one `Cancellable` for
@@ -78,7 +108,7 @@ pre-release. Version 0.3.0 is not an ABI-stable production release.
 - Only one renderer is permitted per native engine, per libmpv API design.
 - Widget signal IDs are disconnected before their sessions are replaced.
 - Call all `MediaSession` mutators from its owning GLib context. Cross-thread
-  public remote control is not supported in Stage 3.
+  public remote control is not supported in Stage 4.
 
 ## Errors and capability claims
 

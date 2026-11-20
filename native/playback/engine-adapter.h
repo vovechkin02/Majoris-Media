@@ -105,6 +105,14 @@ GVariant *mediakit_engine_get_tracks(MediaKitEngine *self);
  */
 GVariant *mediakit_engine_get_chapters(MediaKitEngine *self);
 
+/** mediakit_engine_get_video_color:
+ * @self: Active playback engine.
+ *
+ * Returns: (transfer full): `a{sv}` with typed source color metadata.
+ * Unknown or unsupported fields are omitted rather than guessed.
+ */
+GVariant *mediakit_engine_get_video_color(MediaKitEngine *self);
+
 /** mediakit_engine_select_track:
  * @self: Active playback engine.
  * @kind: One of video, audio or subtitle.
@@ -169,6 +177,19 @@ gboolean mediakit_renderer_render(MediaKitRenderer *self,
                                   gint width_px,
                                   gint height_px,
                                   GError **error);
+
+/** mediakit_renderer_set_icc_profile:
+ * @self: Current GL-thread renderer.
+ * @profile: (nullable): Complete ICC profile blob, or NULL to clear it.
+ * @error: (out) (optional): Invalid ICC input or libmpv rejection.
+ *
+ * Profile selection belongs to the host/monitor integration; it is not
+ * inferred from the source. Call with the GLArea context current.
+ * Returns: TRUE when the profile update is accepted by libmpv.
+ */
+gboolean mediakit_renderer_set_icc_profile(MediaKitRenderer *self,
+                                            GBytes *profile,
+                                            GError **error);
 
 /** mediakit_renderer_release:
  * @self: Renderer being detached on its owning OpenGL context.

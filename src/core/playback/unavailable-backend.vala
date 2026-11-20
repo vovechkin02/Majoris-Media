@@ -44,6 +44,14 @@ namespace MediaKit {
         /** No decoder is available to observe in this backend. */
         public signal void video_decoder_changed (string decoder);
 
+        /** Unavailable engines cannot observe source color information. */
+        public signal void color_metadata_changed ();
+
+        /** Refuses color metadata access without an operational engine. */
+        public Variant get_video_color () throws Error {
+            throw new MediaError.ENGINE_UNAVAILABLE (native_engine_unavailable_reason ());
+        }
+
         /** Reports missing engine without inventing a successful file load. */
         public async void open_async (MediaSource source,
                                       Cancellable? cancellable = null) throws Error {

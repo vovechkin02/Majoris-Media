@@ -25,6 +25,7 @@ typedef enum {
     SIGNAL_SUBTITLE_VISIBILITY_CHANGED,
     SIGNAL_OPERATION_FAILED,
     SIGNAL_VIDEO_DECODER_CHANGED,
+    SIGNAL_COLOR_METADATA_CHANGED,
     SIGNAL_COUNT
 } EngineSignal;
 
@@ -174,6 +175,7 @@ process_events(gpointer data)
         switch (event->event_id) {
         case MPV_EVENT_FILE_LOADED:
             g_signal_emit(self, engine_signals[SIGNAL_METADATA_CHANGED], 0);
+            g_signal_emit(self, engine_signals[SIGNAL_COLOR_METADATA_CHANGED], 0);
             complete_open(self, NULL);
             break;
         case MPV_EVENT_COMMAND_REPLY:
@@ -214,6 +216,11 @@ process_events(gpointer data)
         case MPV_EVENT_PROPERTY_CHANGE: {
             mpv_event_property *property = event->data;
             if (property == NULL) {
+                break;
+            }
+            if (property->format == MPV_FORMAT_NONE &&
+                g_strcmp0(property->name, "video-params") == 0) {
+                g_signal_emit(self, engine_signals[SIGNAL_COLOR_METADATA_CHANGED], 0);
                 break;
             }
             if (property->format == MPV_FORMAT_NONE &&
@@ -424,6 +431,9 @@ mediakit_engine_class_init(MediaKitEngineClass *klass)
     engine_signals[SIGNAL_VIDEO_DECODER_CHANGED] = g_signal_new(
         "video-decoder-changed", G_TYPE_FROM_CLASS(klass), G_SIGNAL_RUN_LAST,
         0, NULL, NULL, NULL, G_TYPE_NONE, 1, G_TYPE_STRING);
+    engine_signals[SIGNAL_COLOR_METADATA_CHANGED] = g_signal_new(
+        "color-metadata-changed", G_TYPE_FROM_CLASS(klass), G_SIGNAL_RUN_LAST,
+        0, NULL, NULL, NULL, G_TYPE_NONE, 0);
 }
 
 /** Allocates and initializes one libmpv handle without touching video GL resources. */
@@ -442,7 +452,19 @@ mediakit_engine_new(void)
     mpv_set_option_string(self->player, "terminal", "no");
     mpv_set_option_string(self->player, "pause", "yes");
     mpv_set_option_string(self->player, "keep-open", "yes");
-    status = mpv_initialize(self->player);
+    /* An unverified GTK GL framebuffer is never advertised as a native HDR sink.
+     * Convert input SDR/HDR to a well-defined 8-bit BT.709/BT.1886 target.
+     * A supplied display ICC profile may further refine SDR color conversion. */
+    status = mpv_set_option_string(self->player, "target-prim", "bt.709");
+    if (status >= 0) {
+        status = mpv_set_option_string(self->player, "target-trc", "bt.1886");
+    }
+    if (status >= 0) {
+        status = mpv_set_option_string(self->player, "icc-profile-auto", "yes");
+    }
+    if (status >= 0) {
+        status = mpv_initialize(self->player);
+    }
     if (status < 0) {
         mpv_terminate_destroy(self->player);
         self->player = NULL;
@@ -459,6 +481,7 @@ mediakit_engine_new(void)
     mpv_observe_property(self->player, 0, "chapter", MPV_FORMAT_INT64);
     mpv_observe_property(self->player, 0, "sub-visibility", MPV_FORMAT_FLAG);
     mpv_observe_property(self->player, 0, "hwdec-current", MPV_FORMAT_STRING);
+    mpv_observe_property(self->player, 0, "video-params", MPV_FORMAT_NONE);
     mpv_set_wakeup_callback(self->player, on_mpv_wakeup, self);
 #endif
     return self;
@@ -776,6 +799,68 @@ mediakit_engine_get_chapters(MediaKitEngine *self)
 #endif
 }
 
+
+#ifdef MEDIAKIT_HAVE_MPV
+/** Copies only known primitive mpv metadata types into a GLib variant dictionary. */
+static void
+add_color_field(GVariantBuilder *builder, const mpv_node *root, const char *key)
+{
+    const mpv_node *field = find_node_member(root, key);
+
+    if (field == NULL) {
+        return;
+    }
+    if (field->format == MPV_FORMAT_STRING && field->u.string != NULL) {
+        gchar *safe = node_safe_text(field);
+        g_variant_builder_add(builder, "{sv}", key, g_variant_new_string(safe));
+        g_free(safe);
+    } else if (field->format == MPV_FORMAT_DOUBLE &&
+               isfinite(field->u.double_) && field->u.double_ >= 0.0) {
+        g_variant_builder_add(builder, "{sv}", key,
+                              g_variant_new_double(field->u.double_));
+    } else if (field->format == MPV_FORMAT_INT64 && field->u.int64 >= 0) {
+        g_variant_builder_add(builder, "{sv}", key,
+                              g_variant_new_int64(field->u.int64));
+    }
+}
+#endif
+
+/** Returns a source-color snapshot without claiming any compositor HDR support. */
+GVariant *
+mediakit_engine_get_video_color(MediaKitEngine *self)
+{
+    GVariantBuilder metadata;
+    g_return_val_if_fail(MEDIAKIT_IS_ENGINE(self), NULL);
+    g_variant_builder_init(&metadata, G_VARIANT_TYPE_VARDICT);
+#ifdef MEDIAKIT_HAVE_MPV
+    mpv_node root = {0};
+    if (self->player != NULL && !self->closing &&
+        mpv_get_property(self->player, "video-params", MPV_FORMAT_NODE, &root) >= 0) {
+        if (root.format == MPV_FORMAT_NODE_MAP) {
+            const char *names[] = {
+                "primaries", "gamma", "colormatrix", "colorlevels",
+                "max-cll", "max-fall", "min-luma", "max-luma",
+                "scene-max-r", "scene-max-g", "scene-max-b", NULL
+            };
+            for (int index = 0; names[index] != NULL; index++) {
+                add_color_field(&metadata, &root, names[index]);
+            }
+        }
+        mpv_free_node_contents(&root);
+    }
+    if (self->player != NULL && !self->closing) {
+        gint64 profile = 0;
+        if (mpv_get_property(self->player,
+                             "current-tracks/video/dolby-vision-profile",
+                             MPV_FORMAT_INT64, &profile) >= 0 && profile > 0) {
+            g_variant_builder_add(&metadata, "{sv}", "dolby-vision-profile",
+                                  g_variant_new_int64(profile));
+        }
+    }
+#endif
+    return g_variant_ref_sink(g_variant_builder_end(&metadata));
+}
+
 /** Queues one validated track selection using libmpv's public property command. */
 gboolean
 mediakit_engine_select_track(MediaKitEngine *self, const gchar *kind,
@@ -985,6 +1070,49 @@ mediakit_renderer_class_init(MediaKitRendererClass *klass)
         G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL, G_TYPE_NONE, 0);
 }
 
+/** Applies or clears an ICC profile without changing the source metadata. */
+gboolean
+mediakit_renderer_set_icc_profile(MediaKitRenderer *self, GBytes *profile, GError **error)
+{
+    g_return_val_if_fail(MEDIAKIT_IS_RENDERER(self), FALSE);
+    if (self->released) {
+        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_CLOSED,
+                            "Cannot update a released OpenGL renderer");
+        return FALSE;
+    }
+#ifdef MEDIAKIT_HAVE_MPV
+    gsize size = 0;
+    const guint8 *bytes = NULL;
+    mpv_byte_array blob = {0};
+    int status;
+
+    if (profile != NULL) {
+        bytes = g_bytes_get_data(profile, &size);
+        /* Only reasonably sized ICC profiles with a standard header are passed
+         * to the GPU library; avoid unbounded memory or arbitrary file blobs. */
+        if (size < 128 || size > 4 * 1024 * 1024 ||
+            bytes == NULL || memcmp(bytes + 36, "acsp", 4) != 0) {
+            g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
+                                "Display ICC profile is invalid or too large");
+            return FALSE;
+        }
+    }
+    blob.data = (void *)bytes;
+    blob.size = size;
+    status = mpv_render_context_set_parameter(self->render_context,
+                                               MPV_RENDER_PARAM_ICC_PROFILE, &blob);
+    if (status < 0) {
+        set_mpv_error(error, status, "Unable to configure display ICC profile");
+        return FALSE;
+    }
+    return TRUE;
+#else
+    g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED,
+                        mediakit_engine_unavailable_reason());
+    return FALSE;
+#endif
+}
+
 /** Draws into a GTK GLArea-owned framebuffer without CPU frame copies. */
 gboolean
 mediakit_renderer_render(MediaKitRenderer *self,
@@ -1000,8 +1128,9 @@ mediakit_renderer_render(MediaKitRenderer *self,
 #ifdef MEDIAKIT_HAVE_MPV
     GLint framebuffer = 0;
     int flip_y = 1;
+    int depth = 8;
     mpv_opengl_fbo fbo;
-    mpv_render_param params[3];
+    mpv_render_param params[4];
     int status;
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &framebuffer);
     fbo.fbo = framebuffer;
@@ -1010,7 +1139,8 @@ mediakit_renderer_render(MediaKitRenderer *self,
     fbo.internal_format = 0;
     params[0] = (mpv_render_param){ MPV_RENDER_PARAM_OPENGL_FBO, &fbo };
     params[1] = (mpv_render_param){ MPV_RENDER_PARAM_FLIP_Y, &flip_y };
-    params[2] = (mpv_render_param){ MPV_RENDER_PARAM_INVALID, NULL };
+    params[2] = (mpv_render_param){ MPV_RENDER_PARAM_DEPTH, &depth };
+    params[3] = (mpv_render_param){ MPV_RENDER_PARAM_INVALID, NULL };
     mpv_render_context_update(self->render_context);
     status = mpv_render_context_render(self->render_context, params);
     if (status < 0) {

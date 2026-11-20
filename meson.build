@@ -1,7 +1,7 @@
 project(
   'majoris-media',
   ['c', 'vala'],
-  version: '0.2.0',
+  version: '0.4.0',
   license: 'GPL-3.0-or-later',
   meson_version: '>=1.4',
   default_options: ['c_std=gnu11', 'warning_level=2'],
@@ -43,6 +43,6 @@ summary(
     'Introspection': gir_compiler.found(),
     'Tests': get_option('tests'),
   },
-  section: 'Majoris Media Stage 2',
+  section: 'Majoris Media Stage 4',
   bool_yn: true,
 )

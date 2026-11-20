@@ -11,6 +11,10 @@ and two original English subtitle lines. It contains:
 - One SubRip subtitle stream.
 - Two source chapters: `Beginning` and `Second chapter`.
 
+`hdr10-reference.mp4` is an original one-frame, 64×64 HEVC Main10 reference
+with BT.2020 primaries and SMPTE ST 2084 (PQ) transfer tags. It is useful for
+probing source metadata but does **not** validate tone mapping or monitor HDR.
+
 The fixture is checked into the repository so tests require no runtime FFmpeg
 CLI. It contains no third-party creative media. Use `ffprobe` to inspect stream
 metadata when adding new assertions. These two short samples are **not** a codec,

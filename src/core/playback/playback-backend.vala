@@ -40,6 +40,12 @@ namespace MediaKit {
         /** Actual active video decoder changes, `no` meaning software fallback. */
         public signal void video_decoder_changed (string decoder);
 
+        /** Notifies consumers that decoded source color metadata has changed. */
+        public signal void color_metadata_changed ();
+
+        /** Snapshot of source color metadata, never of a validated display path. */
+        public abstract Variant get_video_color () throws Error;
+
         /** Resolves only on successful loaded-stream confirmation. */
         public abstract async void open_async (MediaSource source,
                                                Cancellable? cancellable = null) throws Error;

@@ -34,6 +34,14 @@ namespace MediaKit {
             renderer.render (width_px, height_px);
         }
 
+        /** Installs a caller-selected display ICC profile on the current GL thread. */
+        public void set_display_icc_profile (Bytes? profile) throws Error {
+            if (detached) {
+                throw new MediaError.INVALID_ARGUMENT ("OpenGL output is detached");
+            }
+            renderer.set_icc_profile (profile);
+        }
+
         /** Releases graphics resources before a GLArea loses its current context. */
         public void detach () {
             if (detached) {

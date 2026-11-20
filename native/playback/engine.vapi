@@ -30,6 +30,9 @@ namespace MediaKitNative {
         /** Returns structured chapter metadata in source order. */
         public GLib.Variant get_chapters ();
 
+        /** Returns source color metadata as a{sv}, independent of display output. */
+        public GLib.Variant get_video_color ();
+
         /** Queues video, audio or subtitle selection, with null meaning off. */
         public bool select_track (string kind, string? id) throws GLib.Error;
 
@@ -44,6 +47,9 @@ namespace MediaKitNative {
 
         /** Creates one renderer from the current OpenGL context. */
         public Renderer create_renderer () throws GLib.Error;
+
+        /** Delivered after an observed video color-property change. */
+        public signal void color_metadata_changed ();
 
         /** Delivered when an actual natural end-of-file occurs. */
         public signal void ended ();
@@ -88,6 +94,9 @@ namespace MediaKitNative {
     internal class Renderer : GLib.Object {
         /** Draws a video frame into the current framebuffer. */
         public bool render (int width_px, int height_px) throws GLib.Error;
+
+        /** Applies a validated host-provided display ICC profile on its GL thread. */
+        public bool set_icc_profile (GLib.Bytes? profile) throws GLib.Error;
 
         /** Releases GPU objects with the same OpenGL context current. */
         public void release ();

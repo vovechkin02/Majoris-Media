@@ -44,6 +44,9 @@ namespace MediaKit {
         /** Active decoder observed directly from libmpv, not the requested policy. */
         public signal void video_decoder_changed (string decoder);
 
+        /** Notifies the consumer when the libmpv source color metadata changes. */
+        public signal void color_metadata_changed ();
+
         /** Native engine lifetime belongs exclusively to this backend. */
         private MediaKitNative.Engine engine;
 
@@ -117,6 +120,11 @@ namespace MediaKit {
                     weak_self.video_decoder_changed (decoder);
                 }
             });
+            handlers += engine.color_metadata_changed.connect (() => {
+                if (weak_self != null && !weak_self.closed) {
+                    weak_self.color_metadata_changed ();
+                }
+            });
         }
 
         /** Opens media asynchronously, resolving only after an actual libmpv load event. */
@@ -166,6 +174,12 @@ namespace MediaKit {
         public Variant get_chapters () throws Error {
             ensure_open ();
             return engine.get_chapters ();
+        }
+
+        /** Retrieves a typed mpv source-color snapshot without copying video frames. */
+        public Variant get_video_color () throws Error {
+            ensure_open ();
+            return engine.get_video_color ();
         }
 
         /** Requests a validated stream change without blocking the GTK main loop. */

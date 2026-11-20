@@ -1,3 +1,13 @@
+majoris-media (0.4.0-1) unstable; urgency=medium
+
+  * Observe typed source colorimetry, HDR10/HLG/HDR10+ scene metadata and
+    available Dolby Vision profile information without inventing display HDR.
+  * Configure a conservative SDR BT.709/BT.1886 OpenGL rendering target.
+  * Permit bounded host-provided display ICC profiles through the libmpv API.
+  * Reject unverified forced native HDR and add source color contract tests.
+
+ -- Majoris Maintainers <maintainers@invalid.example>  Fri, 20 Nov 2026 18:50:00 +1100
+
 majoris-media (0.3.0-1) unstable; urgency=medium
 
   * Discover and select video, audio and subtitle streams through libmpv.

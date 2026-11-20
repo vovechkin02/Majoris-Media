@@ -12,6 +12,7 @@ core_sources = files(
   'playback-options.vala',
   'playback-state.vala',
   'video-information.vala',
+  'video-color-information.vala',
   'playback/mpv-backend.vala',
   'playback/playback-backend.vala',
   'playback/unavailable-backend.vala',

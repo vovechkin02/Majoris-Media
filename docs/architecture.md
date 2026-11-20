@@ -1,4 +1,4 @@
-# Architecture — Stage 3 (0.3.0)
+# Architecture — Stage 4 (0.4.0)
 
 ## Component and dependency structure
 
@@ -81,6 +81,31 @@ only while bound to a session. All subscriptions are disconnected on rebinding.
 - `hwdec=auto-safe` may fall back to software. Public decoder observation
   reports the actual engine choice but does not prove GPU display efficiency.
 
+## Stage 4 source color and SDR output contracts
+
+- The engine requests an **SDR BT.709 / BT.1886 target** before libmpv
+  initialization; GTK's default OpenGL framebuffer is treated as an 8-bit
+  target. Color conversion/tone mapping remains inside libmpv's embedded
+  OpenGL renderer. This stage does not replace libmpv with `gpu-next`.
+- Native `video-params` changes are observed separately from `track-list` and
+  `chapter-list`. A bounded `a{sv}` snapshot captures primitive color tokens,
+  available static HDR luminance, HDR10+ scene peaks and an optional reported
+  Dolby Vision profile. No frame buffers cross into Vala.
+- `VideoColorInformation` classifies metadata, and `MediaSession` emits only
+  value-changed snapshots. It must never imply monitor support or complete
+  Dolby Vision Profile 7 FEL reconstruction.
+- A host can supply one **display** ICC profile to the GTK view; the native
+  adapter passes bounded bytes using `MPV_RENDER_PARAM_ICC_PROFILE`, on the
+  renderer's GL thread. No monitor ICC autodetection or file I/O occurs in
+  MediaKit. Profiles are reset when the native renderer is replaced.
+- `HdrOutputPolicy.PREFER_NATIVE` currently returns `UNSUPPORTED` before source
+  mutation. `AUTO` and `TONE_MAP_SDR` use the SDR target. The
+  `MediaCapabilities.native_hdr` and `hdr_presentation` verification fields
+  remain **UNVERIFIED** regardless of input tags.
+- Full HDR compositor interaction, 10-bit swapchains, output EOTF signaling,
+  actual monitor scanout and Dolby Vision Profile 7 FEL processing are outside
+  the present GL render API and require a future advanced-renderer path.
+
 ## Design patterns and justification
 
 | GoF pattern or idiom | Participants | Actual variation and contract |
@@ -97,8 +122,9 @@ per-frame dynamic dispatch beyond the unavoidable single GL renderer call.
 
 ## Known limitations and next steps
 
-This prototype has not been compiled or run on Debian in the authoring
-container. It has live subtitle/track/chapter selection but does not provide
+This source has not been compiled or run on Debian in the authoring
+container. It has live subtitle/track/chapter selection and source HDR metadata,
+but does not provide
 standalone media probing, playlists, disc navigation, verified hardware decode
 interop, HDR/gpu-next/Dolby Vision Profile 7 FEL output, or HDMI passthrough.
 These require their own implementation and validation stages; see formats.md.

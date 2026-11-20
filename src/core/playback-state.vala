@@ -78,6 +78,12 @@ namespace MediaKit {
         UNSUPPORTED
     }
 
+    /** Identifies the only established embedded-OpenGL output color target. */
+    public enum ColorOutputTarget {
+        /** Eight-bit SDR BT.709 primaries with a BT.1886 transfer curve. */
+        SDR_BT709_BT1886
+    }
+
     /** Identifies the spatial-audio signaling found within a source. */
     public enum SpatialAudioFormat {
         /** The source has not been inspected or no conclusion was reached. */

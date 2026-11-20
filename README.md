@@ -1,6 +1,6 @@
 # Majoris Media
 
-**Version:** 0.3.0 (Stage 3 playback completeness) · **API namespaces:** `MediaKit-1.0`,
+**Version:** 0.4.0 (Stage 4 SDR/HDR color foundation) · **API namespaces:** `MediaKit-1.0`,
 `MediaKitGtk-1.0` · **Platform:** Majoris OS / Debian 13 · **License:** GPL-3.0-or-later
 
 Majoris Media is a reusable audio/video playback foundation for Majoris applications.
@@ -10,9 +10,10 @@ libmpv, and a **GtkGLArea**-attached OpenGL renderer. Applications retain owners
 windows, playlists, toolbars, persistent settings, and fullscreen policy.
 
 > **Verification status:** This is source implementation, not a validated release.
-> Stage 3 static checks passed, but Vala, Meson, libmpv and GTK4 development
+> Stage 4 static checks passed, but Vala, Meson, libmpv and GTK4 development
 > packages were unavailable in the authoring environment. Native compilation,
-> runtime playback, GTK rendering and hardware output are **not verified**.
+> runtime playback, GTK rendering, ICC processing and hardware output are
+> **not verified**.
 > Build and run the tests on Debian before integrating this into the ISO.
 
 ## Contents
@@ -30,7 +31,7 @@ windows, playlists, toolbars, persistent settings, and fullscreen policy.
 
 ## Current implementation
 
-| Area | Stage 3 status |
+| Area | Stage 4 status |
 | --- | --- |
 | Local file and HTTP(S) source identity | Implemented; scheme validated before playback |
 | Per-session native engine | libmpv adapter implemented; independent handles |
@@ -46,8 +47,12 @@ windows, playlists, toolbars, persistent settings, and fullscreen policy.
 | Chapter navigation | Indexed chapters and actual current chapter observation |
 | Buffering and seek state | Cache pause, percentage, seeking and engine events |
 | Video decoder status | Observed `hwdec-current`, including software fallback |
+| Source color metadata | Live `VideoColorInformation`: transfer, primaries, range, matrix, HDR flags, luminance and DV profile when available |
+| Embedded video target | Explicit 8-bit SDR BT.709 / BT.1886 output; tone mapping delegated to libmpv |
+| Display ICC | Optional caller-provided ICC blob through `mpv_render_context_set_parameter`; profile selection belongs to host |
+| Native HDR policy | `PREFER_NATIVE` rejected until actual GTK/compositor HDR output exists; no false positive |
 | Media probe | Standalone probe API reserved; still reports unavailable |
-| HDR / Atmos / DTS:X | Not qualified; output capabilities explicitly unverified |
+| Dolby Vision FEL / native HDR / Atmos / DTS:X | Not qualified; output capabilities explicitly unverified |
 | Blu-ray navigation | Not implemented; dedicated later stage |
 
 `-Dmpv=enabled` is the default and **requires** libmpv and libepoxy development
@@ -59,7 +64,7 @@ for API development and headless testing.
 
 Decoding capability is supplied by the installed libmpv build and its FFmpeg
 libraries. **No blanket format/codec or hardware-decoding guarantee is made.**
-Stage 3 includes a PCM WAV smoke fixture plus a tiny generated MKV with two
+Stage 4 retains a PCM WAV smoke fixture plus a tiny generated MKV with two
 PCM audio tracks, one MPEG-4 video track, subtitles and two chapters. This is
 not a complete format qualification matrix. Source HDR signaling is not equivalent to native
 HDR output; Atmos/DTS:X sources do not guarantee object-audio rendering or
@@ -67,7 +72,7 @@ encoded receiver passthrough. Read [formats](docs/formats.md).
 
 ## Dependencies and building
 
-Required with Stage 3 default options:
+Required with Stage 4 default options:
 
 - Meson >=1.4, Ninja, `valac`, C compiler, GLib/GIO >=2.76.
 - `libmpv-dev` and `libepoxy-dev` for the native engine and GL resolver.
@@ -128,7 +133,7 @@ try {
 }
 ```
 
-Stage 3 track selection after a successful open:
+Stage 3+ track selection after a successful open:
 
 ```vala
 for (uint index = 0; index < session.tracks.get_n_items (); index++) {
@@ -146,6 +151,24 @@ session.set_subtitles_visible (true);
 for the actual engine-selected track. Use `operation_failed` for asynchronously
 rejected controls. Subtitle track selection and visibility are separate.
 
+Stage 4 source-color inspection after a successful open:
+
+```vala
+var color = session.video_color;
+if (color.is_hdr) {
+    message ("Source HDR format: %s", color.hdr_format.to_string ());
+}
+// This remains an SDR GTK target. Native HDR is not yet supported.
+assert (session.color_output_target == MediaKit.ColorOutputTarget.SDR_BT709_BT1886);
+```
+
+The host may pass a monitor ICC profile as `GLib.Bytes` to
+`view.set_display_icc_profile(profile)`. Do not load arbitrary network ICC
+profiles; selection and monitor changes remain the host's responsibility. A
+native-HDR-only playback policy returns `MediaError.UNSUPPORTED` before opening
+because GtkGLArea output cannot yet verify HDR scanout. `AUTO` and
+`TONE_MAP_SDR` select the conservative SDR path.
+
 Run `build/examples/majoris-media-demo` under a graphical session for the
 interactive Open Media file picker. Rendering works with one active GTK view
 per `MediaSession` (libmpv supports only one render context per core).
@@ -157,12 +180,16 @@ per `MediaSession` (libmpv supports only one render context per core).
   `position_us`, `duration_us`, `state_changed`, `position_changed`,
   `duration_changed` and `output_changed`. Its live read-only `tracks` and
   `chapters` models expose stream selection, chapter navigation and subtitles.
+- `MediaKit.VideoColorInformation` reports source colorimetry and observed HDR
+  metadata; neither it nor `color_output_target` guarantees native HDR scanout.
 - `MediaKit.OpenGlOutput` is a GTK-independent GL presentation endpoint. Only
   create/render/release it with the host OpenGL context current.
 - `MediaKit.MediaTrack` includes ID, kind, codec, language, title, selection and
   source flags; `MediaChapter` includes timestamp and title. `MediaProbe` still
   lacks a standalone inspection implementation; output policy remains advisory.
-- `MediaKitGtk.MediaView` embeds the video GL renderer; `MediaKitGtk.MediaControls`
+- `MediaKitGtk.MediaView` embeds the video GL renderer and accepts an optional
+  `set_display_icc_profile(GLib.Bytes?)` provided by the embedding application.
+  `MediaKitGtk.MediaControls`
   supplies optional transport, track, subtitle and chapter controls. See
   [API details](docs/api.md).
 
@@ -181,12 +208,13 @@ contains focused Core, GTK, and native-engine smoke tests. See
 - The Core remains GTK-free. GTK frame rendering occurs only with a current
   GL context. Sources and engine instances do not share mutable global state.
 - Arbitrary media is untrusted. libmpv/FFmpeg are native decoders operating in
-  process, **not** sandboxed decoder workers in Stage 3. No security isolation
+  process, **not** sandboxed decoder workers in Stage 4. No security isolation
   against malicious codecs/containers is claimed.
 - HTTP(S) URLs can initiate network traffic and access remote resources.
   Callers should impose their own trust policy and sandbox/process isolation.
 - The engine currently uses `hwdec=auto-safe`; actual GPU interoperability,
-  native HDR/tonemapping and encoded HDMI audio paths remain unverified.
+  native HDR and encoded HDMI audio paths remain unverified. SDR color-target
+  setup and libmpv tone-mapping wiring are implemented but not visually qualified.
 - libmpv rendering requires a valid active GL context. A session exposes one
   renderer at a time; do not share its renderer across unrelated GL contexts.
 - Source supersession and cancellation are generation-checked. Source switching
@@ -199,7 +227,7 @@ The native smoke test opens a short PCM WAV; a separate representative generated
 MKV exercises live track/chapter discovery and track/visibility controls.
 Source validation, cancellation and GTK session binding are covered separately.
 See [testing](docs/TESTING.md) and the precise
-[Stage 3 verification report](docs/verification-stage3.md). No benchmarks are
+[Stage 4 verification report](docs/verification-stage4.md). No benchmarks are
 claimed; hardware decoding, 4K, HDR and receiver passthrough need target
 hardware qualification.
 

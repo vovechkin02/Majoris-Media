@@ -8,7 +8,7 @@ private class DemoApplication : Gtk.Application {
     /** Shows a neutral playback window with a file picker and transport controls. */
     protected override void activate () {
         var window = new Gtk.ApplicationWindow (this);
-        window.title = "Majoris Media — Stage 3";
+        window.title = "Majoris Media — Stage 4";
         window.set_default_size (960, 600);
 
         var session = new MediaKit.MediaSession ();

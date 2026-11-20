@@ -23,6 +23,17 @@ namespace MediaKit {
         /** Last observed duration in microseconds, zero when unknown. */
         public int64 duration_us { get; private set; default = 0; }
 
+        /** Source color/HDR metadata, never proof of a native HDR display pipeline. */
+        public VideoColorInformation video_color { get; private set; }
+
+        /** Embedded GtkGLArea renders into a defined SDR target, not native HDR. */
+        public ColorOutputTarget color_output_target {
+            get { return ColorOutputTarget.SDR_BT709_BT1886; }
+        }
+
+        /** Emitted when source color metadata actually changes. */
+        public signal void video_color_changed (VideoColorInformation information);
+
         /** Emitted on each real state transition on the owning main context. */
         public signal void state_changed (PlaybackState state);
 
@@ -117,6 +128,7 @@ namespace MediaKit {
             Object (options: options ?? new PlaybackOptions ());
             track_store = new ListStore (typeof (MediaTrack));
             chapter_store = new ListStore (typeof (MediaChapter));
+            video_color = new VideoColorInformation ();
             backend = new UnavailableBackend ();
             attach_backend ();
             capabilities = new MediaCapabilities (
@@ -129,6 +141,12 @@ namespace MediaKit {
         public async void open_async (MediaSource requested_source,
                                       Cancellable? cancellable = null) throws Error {
             cancellable?.set_error_if_cancelled ();
+            if (options.hdr_policy == HdrOutputPolicy.PREFER_NATIVE) {
+                throw new MediaError.UNSUPPORTED (
+                    "Native HDR is unverified in the embedded OpenGL renderer; " +
+                    "choose AUTO or TONE_MAP_SDR for the supported SDR output target"
+                );
+            }
             uint64 generation = ++request_generation;
             cancel_pending ();
             detach_backend ();
@@ -163,6 +181,7 @@ namespace MediaKit {
                     throw new IOError.CANCELLED ("Media load was superseded");
                 }
                 refresh_live_metadata ();
+                refresh_video_color ();
                 update_state (PlaybackState.READY);
             } catch (Error error) {
                 if (generation == request_generation) {
@@ -411,6 +430,12 @@ namespace MediaKit {
                     owner.operation_failed (message);
                 }
             });
+            backend_handlers += backend.color_metadata_changed.connect (() => {
+                var owner = weak_self;
+                if (owner != null && owner.source != null) {
+                    owner.refresh_video_color ();
+                }
+            });
             backend_handlers += backend.video_decoder_changed.connect ((decoder) => {
                 var owner = weak_self;
                 if (owner == null || owner.source == null) {
@@ -505,8 +530,25 @@ namespace MediaKit {
             }
         }
 
+        /** Updates source color information only when the value snapshot has changed. */
+        private void refresh_video_color () {
+            try {
+                var latest = VideoColorInformation.from_metadata (backend.get_video_color ());
+                if (!video_color.equals_values (latest)) {
+                    video_color = latest;
+                    video_color_changed (latest);
+                }
+            } catch (Error error) {
+                warning ("Could not read source video color metadata: %s", error.message);
+            }
+        }
+
         /** Clears per-source models and engine observation without changing options. */
         private void reset_live_metadata () {
+            if (!video_color.equals_values (new VideoColorInformation ())) {
+                video_color = new VideoColorInformation ();
+                video_color_changed (video_color);
+            }
             track_store.remove_all ();
             chapter_store.remove_all ();
             tracks_changed ();

@@ -37,6 +37,32 @@ namespace MediaKitGtk {
             }
         }
 
+        /** Host-provided monitor ICC profile; no automatic display detection is assumed. */
+        private Bytes? display_icc_profile;
+
+        /** Validates and applies a monitor profile without touching the media source. */
+        public void set_display_icc_profile (Bytes? profile) throws Error {
+            if (profile != null) {
+                var size = profile.get_size ();
+                if (size < 128 || size > 4 * 1024 * 1024) {
+                    throw new MediaKit.MediaError.INVALID_ARGUMENT (
+                        "Display ICC profile must be between 128 bytes and 4 MiB"
+                    );
+                }
+            }
+            if (output != null) {
+                render_area.make_current ();
+                if (render_area.get_error () != null) {
+                    throw new MediaKit.MediaError.PLAYBACK_FAILED (
+                        "OpenGL context is unavailable for display ICC update"
+                    );
+                }
+                output.set_display_icc_profile (profile);
+                render_area.queue_render ();
+            }
+            display_icc_profile = profile;
+        }
+
         /** Overlay status message shown only for empty, loading or failed streams. */
         [GtkChild]
         private unowned Gtk.Label status_label;
@@ -129,6 +155,9 @@ namespace MediaKitGtk {
             }
             try {
                 output = current_session.create_opengl_output ();
+                if (display_icc_profile != null) {
+                    output.set_display_icc_profile (display_icc_profile);
+                }
                 render_failure = null;
                 weak MediaView weak_owner = this;
                 frame_handler_id = output.update_requested.connect (() => {
@@ -138,6 +167,7 @@ namespace MediaKitGtk {
                 });
                 render_area.queue_render ();
             } catch (Error error) {
+                release_renderer ();
                 warning ("Unable to attach media video output: %s", error.message);
                 render_failure = error.message;
                 status_label.label = render_failure;

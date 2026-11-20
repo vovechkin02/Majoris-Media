@@ -1,4 +1,4 @@
-# Testing and release qualification — Stage 3
+# Testing and release qualification — Stage 4
 
 ## Focused tests
 
@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | `media-source-documentation` | unit | Verify Valadoc/gtk-doc summaries on handwritten definitions |
 | `media-source-structure` | unit | Meson source inventories, XML templates, layering, UTF-8 and whitespace |
-| `media-core-contract` | unit | Valid/rejected URIs, initial states, missing file, pre-canceled load |
+| `media-core-contract` | unit | Source/lifecycle rules plus Stage 4 SDR, HDR10, HLG, HDR10+, DV classification and unsupported native HDR |
 | `media-engine-playback` | integration | Tiny generated WAV, actual `FILE_LOADED`, play, pause, seek, stop, restart |
 | `media-engine-metadata` | integration | Original multistream MKV: track inventory/selection, chapters, subtitle visibility, model reset |
 | `media-gtk-contract` | integration | GTK templates and independent session assignment |
@@ -16,7 +16,9 @@ mono 16-bit PCM. The second original fixture, `multi-stream.mkv`, is 3 seconds
 with one MPEG-4 video, two PCM audio tracks, one SRT track and two chapters.
 Both fixtures are committed and deterministic; test execution needs no FFmpeg
 CLI installed.
-No HDR, Atmos or large decoder benchmark tests are justified at this stage.
+The tiny HEVC reference fixture also permits later native HDR10 detection
+qualification. These are **metadata** tests, not monitor-color correctness,
+HDR10+ dynamic scene-processing, Dolby Vision FEL, Atmos or 4K benchmarks.
 
 ## Commands
 
@@ -47,6 +49,6 @@ claims. Test the headless core build separately with `-Dgtk=false`.
    consumer compilation.
 
 The source authoring environment had no valac, meson, GLib/GTK4 or libmpv
-headers and no package download access. Therefore Stage 3 native compilation,
+headers and no package download access. Therefore Stage 4 native compilation,
 GIR generation and runtime tests are **NOT RUN**, not passed. See
-[verification-stage3.md](verification-stage3.md).
+[verification-stage4.md](verification-stage4.md).

@@ -1,6 +1,6 @@
-# Playback format targets and qualification — Stage 3
+# Playback format targets and qualification — Stage 4
 
-Stage 3 delegates format selection and decoding to the installed libmpv/FFmpeg
+Stage 4 delegates format selection and decoding to the installed libmpv/FFmpeg
 build. A codec being present upstream does **not** establish hardware decoder,
 GTK render, display HDR, object audio or receiver passthrough support.
 
@@ -24,6 +24,28 @@ configured PipeWire/ALSA. These remain **unverified**.
 Network sources are limited by `MediaSource` to `file`, `http` and `https`.
 M3U8/DASH and other protocol expansion will be addressed with a controlled
 security policy. Commercial disc decryption is not supplied by this library.
+
+## Stage 4 color/HDR implementation and limits
+
+Stage 4 reads `video-params` and available DV profile properties from libmpv,
+exposing source colorimetry in `VideoColorInformation`. HDR10 (PQ), HLG and
+HDR10+ scene-max values are classified only when observed; Dolby Vision
+requires metadata/profiles from the engine. Support depends on libmpv version
+and actual decoded stream metadata, not on file-extension recognition.
+
+The embedded renderer explicitly targets **BT.709 / BT.1886 SDR**, with
+libmpv handling input gamut conversion and HDR-to-SDR tone mapping. The host
+may provide an ICC display profile using the libmpv render API. This is an
+implemented **output policy**, not a validated claim of accurate rendered
+pixels or native HDR. Actual HDR swapchains, HDR10+ dynamic output metadata,
+Dolby Vision monitor signaling, GPU-next and Profile 7 FEL processing remain
+unavailable/unverified in this GTK OpenGL path. `PREFER_NATIVE` is rejected
+rather than silently returning an SDR image under a native HDR promise.
+
+The included `hdr10-reference.mp4` is an original one-frame 64×64 HEVC Main10
+source with BT.2020 primaries and PQ transfer tags. `ffprobe` validates the
+encoded stream metadata; this does not validate a monitor output or HDR10+
+metadata support.
 
 ## Stage 3 representative test evidence
 
