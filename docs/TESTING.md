@@ -156,3 +156,21 @@ operation must fail on an SDR-configured engine, and the ordinary `render`
 operation must reject a PQ-configured engine. These tests require working GL
 and patched libmpv, not this source-only authoring environment. Do not count
 source-code inspection as proof that GTK, Mutter and the monitor support HDR.
+
+### Stage 7.6 native resource safety
+
+`media-hdr-frame-budget` is a single independent C11/pthreads unit test covering
+per-view allocation bounds, recovery, independent lifetime references and
+concurrent reservations. It does not claim to exercise GL, GTK or libmpv.
+On development machines it can also run without Meson:
+
+```sh
+gcc -std=gnu11 -Wall -Wextra -Werror -O2 -pthread \
+  -I native/gtk native/gtk/hdr-frame-budget.c \
+  tests/unit/hdr-frame-budget.c -o /tmp/majoris-hdr-budget
+/tmp/majoris-hdr-budget
+```
+
+Native GTK color-state correctness and monitored HDR output still require the
+patched build plus hardware/Wayland validation; see
+`verification-stage7-0.7.6.md`.

@@ -142,3 +142,13 @@ test(
   suite: 'integration',
   timeout: 20,
 )
+
+# GTK-independent native safety test for the experimental HDR texture budget.
+hdr_budget_test = executable(
+  'test-hdr-frame-budget',
+  'unit/hdr-frame-budget.c',
+  '../native/gtk/hdr-frame-budget.c',
+  dependencies: [dependency('threads')],
+  include_directories: include_directories('../native/gtk'),
+)
+test('media-hdr-frame-budget', hdr_budget_test, suite: 'unit')

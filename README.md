@@ -1,6 +1,6 @@
 # Majoris Media
 
-**Version:** 0.7.5 (Stage 7 HDR framebuffer contract and metadata correction) · **API namespaces:** `MediaKit-1.0`,
+**Version:** 0.7.6 (Stage 7 bounded HDR texture lifetime and contract verification) · **API namespaces:** `MediaKit-1.0`,
 `MediaKitGtk-1.0` · **Platform:** Majoris OS / Debian 13 · **License:** GPL-3.0-or-later
 
 Majoris Media is a reusable audio/video playback foundation for Majoris applications.
@@ -10,9 +10,9 @@ libmpv, and a **GtkGLArea**-attached OpenGL renderer. Applications retain owners
 windows, playlists, toolbars, persistent settings, and fullscreen policy.
 
 > **Verification status:** This is source implementation, not a validated release.
-> Stage 7.5 static checks passed, but Vala, Meson, libmpv and GTK4 development
-> packages were unavailable in the authoring environment. Native compilation,
-> runtime playback, GTK rendering, ICC processing and hardware output are
+> Stage 7.6 source checks and the standalone native C11 texture-budget test passed.
+> Vala, Meson, libmpv and GTK4 development packages were unavailable, so full
+> compilation and runtime playback, GTK rendering, ICC processing and hardware output are
 > **not verified**.
 > Build and run the tests on Debian before integrating this into the ISO.
 
@@ -52,7 +52,7 @@ windows, playlists, toolbars, persistent settings, and fullscreen policy.
 | Renderer quality | Opt-in bounded debanding, default balanced |
 | Framebuffer telemetry | GL RGB bit depth and render dithering depth measured on active framebuffer; no HDR output inference |
 | Embedded gpu-next | Default: stable legacy OpenGL. Optional patched-libmpv draft backend is strictly opt-in; unverified native HDR |
-| Optional HDR GTK texture view | Opt-in `HdrMediaView` verifies RGB16F attachments, passes GL_RGBA16F to patched libmpv, and submits BT.2100/PQ textures; monitor HDR remains unverified |
+| Optional HDR GTK texture view | Opt-in `HdrMediaView` verifies RGB16F attachments and accepted BT.2100/PQ texture tags; caps outstanding GPU frames and treats compositor backpressure as recoverable; monitor HDR remains unverified |
 | Standalone gpu-next Wayland | Optional separately windowed mpv 0.42+ process, private JSON IPC, ready-state handshake, pause/seek/query and cleanup; not embedded into GTK |
 | Advanced display negotiation | mpv native Wayland `gpu-next`, source/target hint modes, ST 2094-40 / ST 2094-10 internal tone maps; actual output must be tested |
 | GPU-next FEL reconstruction | Upstream renderer can attempt it; not proven by executable version or this library |
@@ -73,6 +73,28 @@ windows, playlists, toolbars, persistent settings, and fullscreen policy.
 packages; missing dependencies stop configuration rather than silently generating a
 non-playing release. An intentionally non-playing build can use `-Dmpv=disabled`
 for API development and headless testing.
+
+## Stage 7.6 — bounded HDR frame lifetime and strict GTK handoff
+
+The experimental GTK HDR view now limits its outstanding RGBA16F images to
+**three per widget** (at the maximum 4096 × 2304 target, at most approximately
+216 MiB of raw RGBA16F texture storage, excluding driver overhead). GPU textures
+are owned by GTK until the GL texture release callback, even after the widget
+is disposed or its session is replaced. A separate C11 atomic tracker enforces
+this limit, survives producer disposal, and is exercised by an actual native
+unit/concurrency test without GTK dependencies.
+
+When GTK is still retaining three frames, `HdrMediaView` **preserves the previous
+frame**, leaves the new frame pending, and retries on a later playback update.
+It does not treat temporary compositor backpressure as a fatal rendering error
+or immediately submit a fourth texture. Successful handoff additionally checks
+GTK's accepted `GdkTexture` storage format and BT.2100/PQ color-state tag.
+These checks validate a software contract, **not the monitor output signal**.
+
+The experimental patched libmpv ABI remains required and the default Debian
+build continues using its existing SDR renderer. Dolby Vision FEL correctness,
+actual HDR luminance and dynamic HDMI metadata output remain unverified or
+unsupported as documented in `docs/verification-stage7-0.7.6.md`.
 
 ## Stage 7.4 — experimental embedded PQ texture output
 

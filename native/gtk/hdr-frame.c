@@ -2,9 +2,14 @@
 
 #include <epoxy/gl.h>
 
+#include "hdr-frame-budget.h"
+
 /* A GdkGLTexture is immutable while GTK may reference it. One completed
- * frame owns one GL texture. The Gtk widget holds and reuses the last frame
- * between actual libmpv updates rather than allocating per snapshot. */
+ * frame owns one GL texture. The compositor may retain earlier textures even
+ * after the widget replaces its snapshot, so bound all outstanding RGBA16F
+ * frames instead of assuming a single widget-side reference is sufficient. */
+#define MAX_IN_FLIGHT_HDR_FRAMES 3
+
 struct _MediaKitHdrFrame {
     GdkGLContext *context;
     GLuint texture;
@@ -14,12 +19,15 @@ struct _MediaKitHdrFrame {
     GLint previous_viewport[4];
     gint width_px;
     gint height_px;
+    MediaKitHdrFrameBudget *budget;
+    gboolean slot_reserved;
 };
 
 typedef struct {
     GdkGLContext *context;
     GLuint texture;
     GLsync sync;
+    MediaKitHdrFrameBudget *budget;
 } RetiredTexture;
 
 /** Releases texture storage when its last GdkTexture user releases it. */
@@ -35,6 +43,8 @@ retired_texture_destroy(gpointer user_data)
         glDeleteTextures(1, &retired->texture);
     }
     g_clear_object(&retired->context);
+    mediakit_hdr_frame_budget_release(retired->budget);
+    mediakit_hdr_frame_budget_unref(retired->budget);
     g_free(retired);
 }
 
@@ -45,6 +55,12 @@ mediakit_hdr_frame_new(GdkGLContext *context)
     g_return_val_if_fail(GDK_IS_GL_CONTEXT(context), NULL);
     MediaKitHdrFrame *self = g_new0(MediaKitHdrFrame, 1);
     self->context = g_object_ref(context);
+    self->budget = mediakit_hdr_frame_budget_new(MAX_IN_FLIGHT_HDR_FRAMES);
+    if (self->budget == NULL) {
+        g_clear_object(&self->context);
+        g_free(self);
+        return NULL;
+    }
     return self;
 }
 
@@ -54,7 +70,7 @@ mediakit_hdr_frame_begin(MediaKitHdrFrame *self, gint width_px,
                           gint height_px, GError **error)
 {
     g_return_val_if_fail(self != NULL, FALSE);
-    if (self->texture != 0 || self->framebuffer != 0) {
+    if (self->slot_reserved || self->texture != 0 || self->framebuffer != 0) {
         g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_PENDING,
                             "An HDR frame is already in progress");
         return FALSE;
@@ -83,8 +99,15 @@ mediakit_hdr_frame_begin(MediaKitHdrFrame *self, gint width_px,
     glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &self->previous_read_framebuffer);
     glGetIntegerv(GL_VIEWPORT, self->previous_viewport);
     glGetIntegerv(GL_TEXTURE_BINDING_2D, &previous_texture);
+    if (!mediakit_hdr_frame_budget_try_acquire(self->budget)) {
+        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_WOULD_BLOCK,
+                            "The compositor is retaining too many HDR frames");
+        return FALSE;
+    }
+    self->slot_reserved = TRUE;
     glGenTextures(1, &self->texture);
     if (self->texture == 0) {
+        mediakit_hdr_frame_abort(self);
         g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NO_SPACE,
                             "Unable to allocate an HDR texture");
         return FALSE;
@@ -157,6 +180,7 @@ mediakit_hdr_frame_finish(MediaKitHdrFrame *self, GError **error)
     retired->context = g_object_ref(self->context);
     retired->texture = self->texture;
     retired->sync = sync;
+    retired->budget = mediakit_hdr_frame_budget_ref(self->budget);
     GdkGLTextureBuilder *builder = gdk_gl_texture_builder_new();
     gdk_gl_texture_builder_set_context(builder, self->context);
     gdk_gl_texture_builder_set_id(builder, self->texture);
@@ -170,6 +194,7 @@ mediakit_hdr_frame_finish(MediaKitHdrFrame *self, GError **error)
         gdk_gl_texture_builder_set_sync(builder, sync);
     }
     self->texture = 0;
+    self->slot_reserved = FALSE;  /* The GdkTexture release callback now owns the slot. */
     GdkTexture *texture = gdk_gl_texture_builder_build(
         builder, retired_texture_destroy, retired);
     g_object_unref(builder);
@@ -177,6 +202,18 @@ mediakit_hdr_frame_finish(MediaKitHdrFrame *self, GError **error)
         retired_texture_destroy(retired);
         g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_FAILED,
                             "GTK rejected the color-tagged HDR texture");
+        return NULL;
+    }
+    /* Verify the object GTK actually accepted instead of treating the
+     * requested builder values as evidence of a correct color-state tag. */
+    if (gdk_texture_get_format(texture) !=
+            GDK_MEMORY_R16G16B16A16_FLOAT_PREMULTIPLIED ||
+        !gdk_color_state_equal(gdk_texture_get_color_state(texture),
+                               gdk_color_state_get_rec2100_pq())) {
+        g_object_unref(texture);  /* Invokes the resource release callback. */
+        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED,
+                            "GTK did not retain the RGB16F BT.2100/PQ texture contract");
+        return NULL;
     }
     return texture;
 }
@@ -186,7 +223,7 @@ void
 mediakit_hdr_frame_abort(MediaKitHdrFrame *self)
 {
     g_return_if_fail(self != NULL);
-    if (self->framebuffer == 0 && self->texture == 0) {
+    if (!self->slot_reserved && self->framebuffer == 0 && self->texture == 0) {
         return;
     }
     gdk_gl_context_make_current(self->context);
@@ -204,6 +241,10 @@ mediakit_hdr_frame_abort(MediaKitHdrFrame *self)
     }
     self->framebuffer = 0;
     self->texture = 0;
+    if (self->slot_reserved) {
+        self->slot_reserved = FALSE;
+        mediakit_hdr_frame_budget_release(self->budget);
+    }
 }
 
 /** Releases unpublished GPU resources while preserving already-published textures. */
@@ -215,5 +256,6 @@ mediakit_hdr_frame_free(MediaKitHdrFrame *self)
     }
     mediakit_hdr_frame_abort(self);
     g_clear_object(&self->context);
+    mediakit_hdr_frame_budget_unref(self->budget);
     g_free(self);
 }

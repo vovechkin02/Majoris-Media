@@ -139,6 +139,10 @@ namespace MediaKitGtk {
                             frame_bridge.abort ();
                             throw error;
                         }
+                    } catch (IOError.WOULD_BLOCK error) {
+                        // Keep the previous frame and retry on the next libmpv update.
+                        // Never spin the GTK snapshot loop when the compositor is slow.
+                        needs_frame = true;
                     } catch (Error error) {
                         report_failure (error.message);
                     }

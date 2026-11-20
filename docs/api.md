@@ -305,3 +305,14 @@ remain unchanged. See `docs/verification-stage7-embedded.md`.
 - The GTK bridge restores draw and read framebuffer bindings independently,
   fails on GPU allocation or synchronization errors, and retains its previous
   public widget API. No success here implies native HDR display output.
+
+### Stage 7.6 experimental HDR texture backpressure
+
+`MediaKitGtk.HdrMediaView` retains the public API and opt-in prerequisites of
+Stage 7.5. It now bounds published-but-unreleased floating-point frame
+textures to three per view. A transient `G_IO_ERROR_WOULD_BLOCK` from the
+private frame bridge is handled internally without emitting a fatal render
+failure. The current cached texture remains visible until an engine update can
+supply a new frame. GTK's accepted texture storage type and color-state tag
+must match RGBA16F and BT.2100/PQ. The `presentation` property still returns
+`UNVERIFIED`; this is intentional and does not assert native HDR scanout.

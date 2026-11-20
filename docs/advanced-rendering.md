@@ -208,3 +208,26 @@ be converted or mapped by the compositor. Dolby Vision FEL reconstruction,
 actual Wayland color-management negotiation, native HDR monitor EOTF, and
 HDR10+ dynamic HDMI metadata need separate real-device evidence. Refer to
 [verification-stage7-pq.md](verification-stage7-pq.md).
+
+## Stage 7.6 — bounded GPU texture ownership
+
+The experimental PQ `HdrMediaView` no longer assumes the compositor releases
+previous GL textures when the next GTK snapshot is produced. `HdrFrameBudget`
+is a private C11 reference-counted allocation tracker: the view holds one
+reference, and each published `GdkTexture` owns another until its destruction
+callback. An atomic compare-and-exchange prevents more than three in-flight
+RGBA16F images per widget. A frame allocation failure releases its slot, and
+successful publication transfers slot ownership to GTK. This prevents frame
+allocation growth during compositor stalls, resizing and source replacement.
+
+When the cap is reached, the native bridge reports `G_IO_ERROR_WOULD_BLOCK`;
+`HdrMediaView` retains its last texture and retries upon the next engine frame
+update. It does not hammer the GTK snapshot loop with an immediate retry.
+The handoff checks the returned GTK texture's format and BT.2100/PQ tag before
+considering publication successful. A tag is **not** evidence that Mutter or an
+external HDR monitor enabled PQ scanout or forwarded ST 2094 metadata.
+
+A GTK-independent C11 test checks reservation failure, reuse after release,
+producer/texture lifetime separation and concurrent acquisition. GTK/libmpv
+build and real-device rendering require native qualifications described in
+`verification-stage7-0.7.6.md`.

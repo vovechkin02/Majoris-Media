@@ -1,3 +1,13 @@
+majoris-media (0.7.6-1) unstable; urgency=medium
+
+  * Bound experimental HDR framebuffer allocations across GTK texture lifetimes.
+  * Reject frames whose accepted GTK format or color state differs from RGB16F/PQ.
+  * Recover from compositor backpressure without changing playback or SDR output.
+  * Add a GTK-independent C11 atomic lifetime and concurrency qualification test.
+  * Preserve the opt-in patched libmpv requirements and unverified HDR claims.
+
+ -- Majoris Maintainers <maintainers@invalid.example>  Sat, 21 Nov 2026 11:00:00 +1100
+
 majoris-media (0.7.5-1) unstable; urgency=medium
 
   * Validate RGB16F before handing PQ frames to the patched libmpv renderer.
