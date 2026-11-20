@@ -1,5 +1,9 @@
 #include "hdr-frame-budget.h"
 
+/* Meson release builds may set NDEBUG; test assertions must still execute. */
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
 #include <assert.h>
 #include <stddef.h>
 #include <pthread.h>

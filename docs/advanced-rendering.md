@@ -231,3 +231,24 @@ A GTK-independent C11 test checks reservation failure, reuse after release,
 producer/texture lifetime separation and concurrent acquisition. GTK/libmpv
 build and real-device rendering require native qualifications described in
 `verification-stage7-0.7.6.md`.
+
+## Stage 7.7 — GL precision and caller-state contract
+
+Before creating the GTK PQ image, the native bridge now queries the actual
+GL texture storage: internal format RGBA16F, floating-point R/G/B/A component
+types and 16 bits in each component. The bridge refuses to publish a misleading
+PQ-tagged image when a driver substitutes an integer, normalized or incomplete
+format. A small C11 classifier holds the format contract and runs without GTK.
+
+The advanced bridge requires desktop OpenGL >= 3.2 and saves/restores the
+host's FBO bindings, viewport, scissor rectangle, blend factors, clear color,
+and scissor/blend enables around the patched renderer. Frame-budget invariant
+violations remain fail-fast even when NDEBUG would remove C assertions. This follows the libmpv
+OpenGL integration rules, which specifically exclude viewport, scissor, blend
+factors and clear color from its standard-state restoration guarantees.
+
+**Still not implemented/qualified:** upstream-supported embedded gpu-next ABI,
+Wayland/monitor native HDR signaling, Dolby Vision Profile 7 FEL reference
+reconstruction and dynamic HDR10+/Dolby Vision HDMI metadata transport. Even
+valid floating-point PQ pixels may be color-converted by GTK/Mutter. See
+[verification 0.7.7](verification-stage7-0.7.7.md).

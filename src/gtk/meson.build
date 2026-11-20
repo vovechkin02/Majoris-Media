@@ -16,6 +16,7 @@ if experimental_gtk_pq
     'hdr-media-view.vala',
     '../../native/gtk/hdr-frame.c',
     '../../native/gtk/hdr-frame-budget.c',
+    '../../native/gtk/hdr-frame-format.c',
     '../../native/gtk/hdr-frame.vapi',
   ]
   gtk_extra_deps += [epoxy]

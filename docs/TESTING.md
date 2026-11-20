@@ -174,3 +174,21 @@ gcc -std=gnu11 -Wall -Wextra -Werror -O2 -pthread \
 Native GTK color-state correctness and monitored HDR output still require the
 patched build plus hardware/Wayland validation; see
 `verification-stage7-0.7.6.md`.
+
+### Stage 7.7 texture-format and GL state qualification
+
+Run the two GTK-independent native C11 tests on any development machine:
+
+```sh
+cc -std=c11 -Wall -Wextra -Werror -O2 -pthread -I native/gtk \
+  native/gtk/hdr-frame-budget.c tests/unit/hdr-frame-budget.c -o /tmp/hdr-frame-budget
+/tmp/hdr-frame-budget
+cc -std=c11 -Wall -Wextra -Werror -O2 -I native/gtk \
+  native/gtk/hdr-frame-format.c tests/unit/hdr-frame-format.c -o /tmp/hdr-frame-format
+/tmp/hdr-frame-format
+```
+
+These tests deliberately exercise only pure C storage and lifetime contracts.
+The GTK resource bridge and GL state saving must additionally be compiled and
+exercised with GTK4, patched libmpv and a real OpenGL display. Do not mark that
+hardware test as passing based only on a static or C11 test.

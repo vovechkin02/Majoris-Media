@@ -1,6 +1,6 @@
 # Majoris Media
 
-**Version:** 0.7.6 (Stage 7 bounded HDR texture lifetime and contract verification) · **API namespaces:** `MediaKit-1.0`,
+**Version:** 0.7.7 (Stage 7 driver-format validation and GL state integrity) · **API namespaces:** `MediaKit-1.0`,
 `MediaKitGtk-1.0` · **Platform:** Majoris OS / Debian 13 · **License:** GPL-3.0-or-later
 
 Majoris Media is a reusable audio/video playback foundation for Majoris applications.
@@ -10,7 +10,8 @@ libmpv, and a **GtkGLArea**-attached OpenGL renderer. Applications retain owners
 windows, playlists, toolbars, persistent settings, and fullscreen policy.
 
 > **Verification status:** This is source implementation, not a validated release.
-> Stage 7.6 source checks and the standalone native C11 texture-budget test passed.
+> Stage 7.7 source checks and standalone GCC/Clang C11 tests for texture budgeting
+> and driver-format validation passed.
 > Vala, Meson, libmpv and GTK4 development packages were unavailable, so full
 > compilation and runtime playback, GTK rendering, ICC processing and hardware output are
 > **not verified**.
@@ -52,7 +53,7 @@ windows, playlists, toolbars, persistent settings, and fullscreen policy.
 | Renderer quality | Opt-in bounded debanding, default balanced |
 | Framebuffer telemetry | GL RGB bit depth and render dithering depth measured on active framebuffer; no HDR output inference |
 | Embedded gpu-next | Default: stable legacy OpenGL. Optional patched-libmpv draft backend is strictly opt-in; unverified native HDR |
-| Optional HDR GTK texture view | Opt-in `HdrMediaView` verifies RGB16F attachments and accepted BT.2100/PQ texture tags; caps outstanding GPU frames and treats compositor backpressure as recoverable; monitor HDR remains unverified |
+| Optional HDR GTK texture view | Opt-in `HdrMediaView` verifies the *driver-allocated* RGBA16F texture, float channel types and precision, framebuffer attachments, and GTK BT.2100/PQ tags; caps outstanding GPU frames, restores host GL state and treats compositor backpressure as recoverable; monitor HDR remains unverified |
 | Standalone gpu-next Wayland | Optional separately windowed mpv 0.42+ process, private JSON IPC, ready-state handshake, pause/seek/query and cleanup; not embedded into GTK |
 | Advanced display negotiation | mpv native Wayland `gpu-next`, source/target hint modes, ST 2094-40 / ST 2094-10 internal tone maps; actual output must be tested |
 | GPU-next FEL reconstruction | Upstream renderer can attempt it; not proven by executable version or this library |
@@ -74,6 +75,42 @@ packages; missing dependencies stop configuration rather than silently generatin
 non-playing release. An intentionally non-playing build can use `-Dmpv=disabled`
 for API development and headless testing.
 
+## Stage 6 — DVD, Blu-ray and standalone M2TS
+
+Stage 6 added explicit DVD/Blu-ray source construction, isolated optical-disc
+device configuration, native disc-title/edition inventory and selection, and
+conditional interactive menu support on mpv 0.42+. `.m2ts` can be opened as a
+normal local file independently of a Blu-ray disc. `MediaKitGtk` optionally
+shows Titles and Disc Menu controls, with focus-aware keyboard navigation.
+
+Disc media playback depends on the installed libmpv/libbluray/DVD stack and
+source accessibility. No protected-disc decryption is bundled. See
+`docs/disc-playback.md` and `docs/verification-stage6.md` for the important
+limitations and release checks.
+
+## Stage 7.7 — driver-verified texture storage and GL state integrity
+
+The experimental `HdrMediaView` now checks the actual OpenGL texture's
+`GL_TEXTURE_INTERNAL_FORMAT`, RGBA component types and **all four** channel
+precisions before publishing a BT.2100/PQ-tagged `GdkTexture`. A texture must
+be driver-reported `GL_RGBA16F`, with floating-point R/G/B/A components
+and 16-bit storage for each channel. A GTK color-state tag is never a
+substitute for this GPU storage check.
+
+The bridge explicitly requires desktop OpenGL 3.2 or newer (for the texture
+query and sync contract), and saves/restores the framebuffer, viewport,
+scissor rectangle, blend factors, clear color and enabled scissor/blend
+state across the embedded libmpv render operation. Failed frames restore the
+same state through the abort path. The Core/GTK separation, source APIs,
+C ABI and default SDR renderer are unchanged.
+
+New standalone C11 tests cover the pixel-format classifier and frame-budget
+accounting under GCC and Clang, including NDEBUG release settings. The budget
+invariants remain fail-fast in release builds; tests do not emulate GPU rendering. Refer to
+`docs/verification-stage7-0.7.7.md` for the actual native and hardware
+release gates. **Native HDR scanout, HDR10+ display signaling and Dolby
+Vision Profile 7 FEL correctness are not proven by these tests.**
+
 ## Stage 7.6 — bounded HDR frame lifetime and strict GTK handoff
 
 The experimental GTK HDR view now limits its outstanding RGBA16F images to
@@ -94,7 +131,7 @@ These checks validate a software contract, **not the monitor output signal**.
 The experimental patched libmpv ABI remains required and the default Debian
 build continues using its existing SDR renderer. Dolby Vision FEL correctness,
 actual HDR luminance and dynamic HDMI metadata output remain unverified or
-unsupported as documented in `docs/verification-stage7-0.7.6.md`.
+unsupported as documented in `docs/verification-stage7-0.7.7.md`.
 
 ## Stage 7.4 — experimental embedded PQ texture output
 
@@ -447,16 +484,3 @@ GoF participant boundaries, en-US identifiers, XML UI and focused tests.
 GPL-3.0-or-later; see [LICENSE](LICENSE). The repository does not vendor VLC,
 libmpv or FFmpeg source code. Their linked library licenses and dependencies
 must be evaluated for binary redistribution and Debian packaging.
-
-## Stage 6 — DVD, Blu-ray and standalone M2TS
-
-Stage 6 added explicit DVD/Blu-ray source construction, isolated optical-disc
-device configuration, native disc-title/edition inventory and selection, and
-conditional interactive menu support on mpv 0.42+. `.m2ts` can be opened as a
-normal local file independently of a Blu-ray disc. `MediaKitGtk` optionally
-shows Titles and Disc Menu controls, with focus-aware keyboard navigation.
-
-Disc media playback depends on the installed libmpv/libbluray/DVD stack and
-source accessibility. No protected-disc decryption is bundled. See
-`docs/disc-playback.md` and `docs/verification-stage6.md` for the important
-limitations and release checks.

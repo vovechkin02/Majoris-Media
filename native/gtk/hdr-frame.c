@@ -3,6 +3,7 @@
 #include <epoxy/gl.h>
 
 #include "hdr-frame-budget.h"
+#include "hdr-frame-format.h"
 
 /* A GdkGLTexture is immutable while GTK may reference it. One completed
  * frame owns one GL texture. The compositor may retain earlier textures even
@@ -17,6 +18,15 @@ struct _MediaKitHdrFrame {
     GLint previous_framebuffer;
     GLint previous_read_framebuffer;
     GLint previous_viewport[4];
+    GLint previous_scissor_box[4];
+    GLint previous_blend_src_rgb;
+    GLint previous_blend_dst_rgb;
+    GLint previous_blend_src_alpha;
+    GLint previous_blend_dst_alpha;
+    GLfloat previous_clear_color[4];
+    GLboolean previous_scissor_enabled;
+    GLboolean previous_blend_enabled;
+    gboolean state_saved;
     gint width_px;
     gint height_px;
     MediaKitHdrFrameBudget *budget;
@@ -64,6 +74,85 @@ mediakit_hdr_frame_new(GdkGLContext *context)
     return self;
 }
 
+/** Saves the OpenGL state that libmpv explicitly does not promise to preserve. */
+static void
+save_host_gl_state(MediaKitHdrFrame *self)
+{
+    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &self->previous_framebuffer);
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &self->previous_read_framebuffer);
+    glGetIntegerv(GL_VIEWPORT, self->previous_viewport);
+    glGetIntegerv(GL_SCISSOR_BOX, self->previous_scissor_box);
+    glGetIntegerv(GL_BLEND_SRC_RGB, &self->previous_blend_src_rgb);
+    glGetIntegerv(GL_BLEND_DST_RGB, &self->previous_blend_dst_rgb);
+    glGetIntegerv(GL_BLEND_SRC_ALPHA, &self->previous_blend_src_alpha);
+    glGetIntegerv(GL_BLEND_DST_ALPHA, &self->previous_blend_dst_alpha);
+    glGetFloatv(GL_COLOR_CLEAR_VALUE, self->previous_clear_color);
+    self->previous_scissor_enabled = glIsEnabled(GL_SCISSOR_TEST);
+    self->previous_blend_enabled = glIsEnabled(GL_BLEND);
+    self->state_saved = TRUE;
+}
+
+/** Restores GTK's framebuffer and caller GL state after libmpv rendering. */
+static void
+restore_host_gl_state(MediaKitHdrFrame *self)
+{
+    if (!self->state_saved) {
+        return;
+    }
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, self->previous_framebuffer);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, self->previous_read_framebuffer);
+    glViewport(self->previous_viewport[0], self->previous_viewport[1],
+               self->previous_viewport[2], self->previous_viewport[3]);
+    glScissor(self->previous_scissor_box[0], self->previous_scissor_box[1],
+              self->previous_scissor_box[2], self->previous_scissor_box[3]);
+    glBlendFuncSeparate(self->previous_blend_src_rgb, self->previous_blend_dst_rgb,
+                        self->previous_blend_src_alpha, self->previous_blend_dst_alpha);
+    glClearColor(self->previous_clear_color[0], self->previous_clear_color[1],
+                 self->previous_clear_color[2], self->previous_clear_color[3]);
+    if (self->previous_scissor_enabled) {
+        glEnable(GL_SCISSOR_TEST);
+    } else {
+        glDisable(GL_SCISSOR_TEST);
+    }
+    if (self->previous_blend_enabled) {
+        glEnable(GL_BLEND);
+    } else {
+        glDisable(GL_BLEND);
+    }
+    self->state_saved = FALSE;
+}
+
+/** Checks texture allocation against the actual GPU storage, not requested GL format. */
+static gboolean
+verify_gpu_float_texture(GLuint texture)
+{
+    MediaKitHdrPixelFormat format = {0};
+    GLint prior_binding = 0;
+    GLint value = 0;
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &prior_binding);
+    glBindTexture(GL_TEXTURE_2D, texture);
+
+    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_INTERNAL_FORMAT, &value);
+    format.internal_format = (uint32_t)value;
+    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_RED_TYPE, &value);
+    format.red_type = (uint32_t)value;
+    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_GREEN_TYPE, &value);
+    format.green_type = (uint32_t)value;
+    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_BLUE_TYPE, &value);
+    format.blue_type = (uint32_t)value;
+    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_ALPHA_TYPE, &value);
+    format.alpha_type = (uint32_t)value;
+    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_RED_SIZE, &format.red_bits);
+    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_GREEN_SIZE, &format.green_bits);
+    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_BLUE_SIZE, &format.blue_bits);
+    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_ALPHA_SIZE, &format.alpha_bits);
+
+    GLenum status = glGetError();
+    glBindTexture(GL_TEXTURE_2D, (GLuint)prior_binding);
+    return status == GL_NO_ERROR &&
+           mediakit_hdr_pixel_format_is_rgba16f(&format, GL_RGBA16F, GL_FLOAT);
+}
+
 /** Allocates a bounded, offscreen RGBA16F render target without CPU readback. */
 gboolean
 mediakit_hdr_frame_begin(MediaKitHdrFrame *self, gint width_px,
@@ -86,6 +175,21 @@ mediakit_hdr_frame_begin(MediaKitHdrFrame *self, gint width_px,
                             "The HDR GL context could not be made current");
         return FALSE;
     }
+    /* The patched OpenGL libmpv backend requires desktop GL. In particular,
+     * this path uses glGetTexLevelParameteriv to verify the actual storage. */
+    if (gdk_gl_context_get_api(self->context) != GDK_GL_API_GL) {
+        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED,
+                            "Experimental HDR requires a desktop OpenGL context");
+        return FALSE;
+    }
+    gint gl_major = 0;
+    gint gl_minor = 0;
+    gdk_gl_context_get_version(self->context, &gl_major, &gl_minor);
+    if (gl_major < 3 || (gl_major == 3 && gl_minor < 2)) {
+        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED,
+                            "HDR float textures require OpenGL 3.2 or newer");
+        return FALSE;
+    }
     /* Respect both READ and DRAW framebuffer bindings; they may differ in GTK. */
     GLint previous_texture = 0;
     GLint maximum_texture_size = 0;
@@ -95,16 +199,18 @@ mediakit_hdr_frame_begin(MediaKitHdrFrame *self, gint width_px,
                             "HDR frame exceeds the GPU's maximum texture dimension");
         return FALSE;
     }
-    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &self->previous_framebuffer);
-    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &self->previous_read_framebuffer);
-    glGetIntegerv(GL_VIEWPORT, self->previous_viewport);
-    glGetIntegerv(GL_TEXTURE_BINDING_2D, &previous_texture);
     if (!mediakit_hdr_frame_budget_try_acquire(self->budget)) {
         g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_WOULD_BLOCK,
                             "The compositor is retaining too many HDR frames");
         return FALSE;
     }
     self->slot_reserved = TRUE;
+    save_host_gl_state(self);
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &previous_texture);
+    /* libmpv expects these default states for an independently owned FBO.
+     * GTK's previous state is restored before its snapshot resumes. */
+    glDisable(GL_SCISSOR_TEST);
+    glDisable(GL_BLEND);
     glGenTextures(1, &self->texture);
     if (self->texture == 0) {
         mediakit_hdr_frame_abort(self);
@@ -125,6 +231,12 @@ mediakit_hdr_frame_begin(MediaKitHdrFrame *self, gint width_px,
         mediakit_hdr_frame_abort(self);
         g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NO_SPACE,
                             "The GPU rejected the RGBA16F texture allocation");
+        return FALSE;
+    }
+    if (!verify_gpu_float_texture(self->texture)) {
+        mediakit_hdr_frame_abort(self);
+        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED,
+                            "The GPU did not allocate an actual RGBA16F floating-point texture");
         return FALSE;
     }
     glGenFramebuffers(1, &self->framebuffer);
@@ -169,10 +281,7 @@ mediakit_hdr_frame_finish(MediaKitHdrFrame *self, GError **error)
         return NULL;
     }
     glFlush();
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, self->previous_framebuffer);
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, self->previous_read_framebuffer);
-    glViewport(self->previous_viewport[0], self->previous_viewport[1],
-               self->previous_viewport[2], self->previous_viewport[3]);
+    restore_host_gl_state(self);
     glDeleteFramebuffers(1, &self->framebuffer);
     self->framebuffer = 0;
 
@@ -228,10 +337,7 @@ mediakit_hdr_frame_abort(MediaKitHdrFrame *self)
     }
     gdk_gl_context_make_current(self->context);
     if (gdk_gl_context_get_current() == self->context) {
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, self->previous_framebuffer);
-        glBindFramebuffer(GL_READ_FRAMEBUFFER, self->previous_read_framebuffer);
-        glViewport(self->previous_viewport[0], self->previous_viewport[1],
-                   self->previous_viewport[2], self->previous_viewport[3]);
+        restore_host_gl_state(self);
         if (self->framebuffer != 0) {
             glDeleteFramebuffers(1, &self->framebuffer);
         }
@@ -241,6 +347,7 @@ mediakit_hdr_frame_abort(MediaKitHdrFrame *self)
     }
     self->framebuffer = 0;
     self->texture = 0;
+    self->state_saved = FALSE;
     if (self->slot_reserved) {
         self->slot_reserved = FALSE;
         mediakit_hdr_frame_budget_release(self->budget);

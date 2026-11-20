@@ -316,3 +316,13 @@ failure. The current cached texture remains visible until an engine update can
 supply a new frame. GTK's accepted texture storage type and color-state tag
 must match RGBA16F and BT.2100/PQ. The `presentation` property still returns
 `UNVERIFIED`; this is intentional and does not assert native HDR scanout.
+
+### Stage 7.7 private HDR driver and state checks
+
+No new public GObject/GIR/VAPI contract is introduced. Inside
+`native/gtk/hdr-frame.c`, texture allocation verifies driver-reported RGBA16F
+storage through a small, GTK-independent C11 format contract. The GL renderer
+restores the caller's viewport, scissor, blend factors and clear color on both
+success and cancellation/failure. The `HdrMediaView` remains opt-in and can
+emit `rendering_failed` when driver capabilities are insufficient. This does
+not certify monitor HDR, FEL reconstruction or dynamic HDR signaling.

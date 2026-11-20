@@ -152,3 +152,12 @@ hdr_budget_test = executable(
   include_directories: include_directories('../native/gtk'),
 )
 test('media-hdr-frame-budget', hdr_budget_test, suite: 'unit')
+
+# Driver-format verification is a pure C11 contract, independent of GTK and GL.
+hdr_format_test = executable(
+  'test-hdr-frame-format',
+  'unit/hdr-frame-format.c',
+  '../native/gtk/hdr-frame-format.c',
+  include_directories: include_directories('../native/gtk'),
+)
+test('media-hdr-frame-format', hdr_format_test, suite: 'unit')

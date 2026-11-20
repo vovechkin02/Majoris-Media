@@ -1,6 +1,5 @@
 #include "hdr-frame-budget.h"
 
-#include <assert.h>
 #include <stdatomic.h>
 #include <stdlib.h>
 
@@ -31,10 +30,14 @@ mediakit_hdr_frame_budget_new(unsigned int maximum)
 MediaKitHdrFrameBudget *
 mediakit_hdr_frame_budget_ref(MediaKitHdrFrameBudget *budget)
 {
-    assert(budget != NULL);
+    if (budget == NULL) {
+        abort();
+    }
     unsigned int previous = atomic_fetch_add_explicit(&budget->references, 1,
                                                       memory_order_relaxed);
-    assert(previous != 0);
+    if (previous == 0) {
+        abort();
+    }
     return budget;
 }
 
@@ -47,9 +50,13 @@ mediakit_hdr_frame_budget_unref(MediaKitHdrFrameBudget *budget)
     }
     unsigned int previous = atomic_fetch_sub_explicit(&budget->references, 1,
                                                       memory_order_acq_rel);
-    assert(previous != 0);
+    if (previous == 0) {
+        abort();
+    }
     if (previous == 1) {
-        assert(atomic_load_explicit(&budget->in_flight, memory_order_acquire) == 0);
+        if (atomic_load_explicit(&budget->in_flight, memory_order_acquire) != 0) {
+            abort();
+        }
         free(budget);
     }
 }
@@ -58,7 +65,9 @@ mediakit_hdr_frame_budget_unref(MediaKitHdrFrameBudget *budget)
 bool
 mediakit_hdr_frame_budget_try_acquire(MediaKitHdrFrameBudget *budget)
 {
-    assert(budget != NULL);
+    if (budget == NULL) {
+        abort();
+    }
     unsigned int current = atomic_load_explicit(&budget->in_flight,
                                                 memory_order_relaxed);
     while (current < budget->maximum) {
@@ -76,7 +85,9 @@ mediakit_hdr_frame_budget_try_acquire(MediaKitHdrFrameBudget *budget)
 void
 mediakit_hdr_frame_budget_release(MediaKitHdrFrameBudget *budget)
 {
-    assert(budget != NULL);
+    if (budget == NULL) {
+        abort();
+    }
     unsigned int current = atomic_load_explicit(&budget->in_flight,
                                                 memory_order_relaxed);
     while (current != 0) {
@@ -87,13 +98,16 @@ mediakit_hdr_frame_budget_release(MediaKitHdrFrameBudget *budget)
             return;
         }
     }
-    assert(false && "HDR texture budget released without a reservation");
+    /* A double release would otherwise be silent in NDEBUG release builds. */
+    abort();
 }
 
 /** Observes the current number of slots retained by frames or their producer. */
 unsigned int
 mediakit_hdr_frame_budget_in_flight(const MediaKitHdrFrameBudget *budget)
 {
-    assert(budget != NULL);
+    if (budget == NULL) {
+        abort();
+    }
     return atomic_load_explicit(&budget->in_flight, memory_order_acquire);
 }

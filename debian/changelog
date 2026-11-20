@@ -1,3 +1,16 @@
+majoris-media (0.7.7-1) unstable; urgency=medium
+
+  * Validate driver-allocated RGBA16F and floating-point RGBA storage before
+    publishing GTK BT.2100/PQ textures, rejecting silent format downgrades.
+  * Guard the advanced path with desktop OpenGL 3.2 capability checks.
+  * Preserve GL viewport, scissor, blend and clear-color state around libmpv.
+  * Add standalone GCC/Clang C11 format-contract tests and Meson registration.
+  * Keep private format helpers hidden and fail fast on invalid frame-budget
+    accounting even in NDEBUG release builds.
+  * Retain opt-in patched-libmpv and physical HDR/Dolby Vision release gates.
+
+ -- Majoris Maintainers <maintainers@invalid.example>  Sat, 21 Nov 2026 09:25:00 +1100
+
 majoris-media (0.7.6-1) unstable; urgency=medium
 
   * Bound experimental HDR framebuffer allocations across GTK texture lifetimes.

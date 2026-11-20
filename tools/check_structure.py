@@ -46,6 +46,19 @@ def verify_layering() -> list[str]:
     return errors
 
 
+def verify_hdr_contract_sources() -> list[str]:
+    """Ensure the advanced GTK bridge links its native format validator and tests."""
+    gtk_meson = (ROOT / "src/gtk/meson.build").read_text()
+    test_meson = (ROOT / "tests/meson.build").read_text()
+    required_gtk = ("hdr-frame.c", "hdr-frame-budget.c", "hdr-frame-format.c")
+    errors = []
+    if any(f"../../native/gtk/{name}" not in gtk_meson for name in required_gtk):
+        errors.append("Experimental GTK renderer omits a required native HDR source")
+    if "test-hdr-frame-format" not in test_meson or "test-hdr-frame-budget" not in test_meson:
+        errors.append("Standalone HDR native contract tests are not registered")
+    return errors
+
+
 def verify_text() -> list[str]:
     """Check relevant handwritten files for line-ending and whitespace defects."""
     errors = []
@@ -71,7 +84,7 @@ def verify_text() -> list[str]:
 def main() -> int:
     """Check source structure, explicitly without claiming that compilation ran."""
     errors = verify_sources("src/core") + verify_sources("src/gtk") + verify_xml()
-    errors += verify_layering() + verify_text()
+    errors += verify_hdr_contract_sources() + verify_layering() + verify_text()
     for error in errors:
         print("FAIL:", error)
     if errors:

@@ -1,7 +1,7 @@
 project(
   'majoris-media',
   ['c', 'vala'],
-  version: '0.7.6',
+  version: '0.7.7',
   license: 'GPL-3.0-or-later',
   meson_version: '>=1.4',
   default_options: ['c_std=gnu11', 'warning_level=2'],
@@ -70,6 +70,6 @@ summary(
     'Introspection': gir_compiler.found(),
     'Tests': get_option('tests'),
   },
-  section: 'Majoris Media 0.7.6 HDR texture ownership',
+  section: 'Majoris Media 0.7.7 GL storage and state integrity',
   bool_yn: true,
 )
