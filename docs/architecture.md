@@ -1,4 +1,4 @@
-# Architecture — Stage 5 (0.5.0)
+# Architecture — Stage 6 (0.6.0)
 
 ## Component and dependency structure
 
@@ -182,3 +182,14 @@ applied outside repeated decoder/sample hot paths.
 Reference interfaces: https://mpv.io/manual/stable/ (`audio-spdif`,
 `audio-channels`, `audio-device-list`, `audio-params`, `audio-out-params`);
 https://docs.pipewire.org/group__spa__param.html (IEC 61937 codec format enums).
+
+## Stage 6: optical disc adapter
+
+Disc parsing and title selection stay within the existing libmpv Adapter.
+`MediaSource` represents the typed source intent; `MediaSession` remains the
+sole Core Facade and owns the title model. The native adapter receives a local
+source path through a dedicated configuration call and never interpolates it
+into the `dvd://` or `bd://` playback URL. GTK UI adds only optional title/menu
+selectors and focus-aware key routing. No extra decoder or navigation framework
+is introduced. All native metadata allocations and callbacks retain the
+existing per-session ownership and cancellation rules.

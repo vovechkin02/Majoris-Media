@@ -2,6 +2,7 @@
 
 #include <math.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 
@@ -45,6 +46,8 @@ struct _MediaKitEngine {
     gint pending_event_dispatch;
     struct _MediaKitRenderer *active_renderer;
     gboolean closing;
+    gboolean disc_source;
+    gboolean disc_menu_supported;
 #ifdef MEDIAKIT_HAVE_MPV
     mpv_handle *player;
 #endif
@@ -244,7 +247,12 @@ process_events(gpointer data)
             }
             if (property->format == MPV_FORMAT_NONE &&
                 (g_strcmp0(property->name, "track-list") == 0 ||
-                 g_strcmp0(property->name, "chapter-list") == 0)) {
+                 g_strcmp0(property->name, "chapter-list") == 0 ||
+                 g_strcmp0(property->name, "edition-list") == 0 ||
+                 g_strcmp0(property->name, "edition") == 0 ||
+                 g_strcmp0(property->name, "disc-title-list") == 0 ||
+                 g_strcmp0(property->name, "disc-title") == 0 ||
+                 g_strcmp0(property->name, "disc-menu-active") == 0)) {
                 g_signal_emit(self, engine_signals[SIGNAL_METADATA_CHANGED], 0);
                 break;
             }
@@ -516,6 +524,11 @@ mediakit_engine_new_with_audio(const gchar *device_id, const gchar *codecs,
     mpv_observe_property(self->player, 0, "pause", MPV_FORMAT_FLAG);
     mpv_observe_property(self->player, 0, "time-pos", MPV_FORMAT_DOUBLE);
     mpv_observe_property(self->player, 0, "duration", MPV_FORMAT_DOUBLE);
+    mpv_observe_property(self->player, 0, "edition-list", MPV_FORMAT_NONE);
+    mpv_observe_property(self->player, 0, "edition", MPV_FORMAT_NONE);
+    mpv_observe_property(self->player, 0, "disc-title-list", MPV_FORMAT_NONE);
+    mpv_observe_property(self->player, 0, "disc-title", MPV_FORMAT_NONE);
+    mpv_observe_property(self->player, 0, "disc-menu-active", MPV_FORMAT_NONE);
     mpv_observe_property(self->player, 0, "track-list", MPV_FORMAT_NONE);
     mpv_observe_property(self->player, 0, "chapter-list", MPV_FORMAT_NONE);
     mpv_observe_property(self->player, 0, "paused-for-cache", MPV_FORMAT_FLAG);
@@ -541,6 +554,70 @@ MediaKitEngine *
 mediakit_engine_new(void)
 {
     return mediakit_engine_new_with_audio("auto", "", "auto-safe");
+}
+
+#ifdef MEDIAKIT_HAVE_MPV
+/** Detects the minimum mpv version containing the discnav command. */
+static gboolean
+supports_disc_menu(mpv_handle *player)
+{
+    gchar *version = mpv_get_property_string(player, "mpv-version");
+    unsigned int major = 0;
+    unsigned int minor = 0;
+    gboolean supported = FALSE;
+
+    if (version != NULL && sscanf(version, "mpv %u.%u", &major, &minor) == 2) {
+        supported = major > 0 || minor >= 42;
+    }
+    mpv_free(version);
+    return supported;
+}
+#endif
+
+/** Configures a local disc source without interpolating its path into mpv commands. */
+gboolean
+mediakit_engine_prepare_disc(MediaKitEngine *self, const gchar *kind,
+                             const gchar *path, gboolean require_menu, GError **error)
+{
+    const gchar *option;
+    g_return_val_if_fail(MEDIAKIT_IS_ENGINE(self), FALSE);
+
+    if (g_strcmp0(kind, "dvd") == 0) {
+        option = "options/dvd-device";
+    } else if (g_strcmp0(kind, "bluray") == 0) {
+        option = "options/bluray-device";
+    } else {
+        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT,
+                            "Unsupported optical-disc kind");
+        return FALSE;
+    }
+    if (path == NULL || !g_path_is_absolute(path) || strlen(path) > 4096 ||
+        !g_utf8_validate(path, -1, NULL)) {
+        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT,
+                            "Disc device path must be an absolute UTF-8 path");
+        return FALSE;
+    }
+#ifdef MEDIAKIT_HAVE_MPV
+    if (self->player != NULL && !self->closing && self->open_task == NULL) {
+        gboolean menu_supported = supports_disc_menu(self->player);
+        if (require_menu && !menu_supported) {
+            g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED,
+                                "Disc menus require mpv 0.42 or newer");
+            return FALSE;
+        }
+        int status = mpv_set_property_string(self->player, option, path);
+        if (status < 0) {
+            set_mpv_error(error, status, "Unable to configure optical disc device");
+            return FALSE;
+        }
+        self->disc_source = TRUE;
+        self->disc_menu_supported = menu_supported;
+        return TRUE;
+    }
+#endif
+    g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NOT_INITIALIZED,
+                        "No native disc playback engine is available");
+    return FALSE;
 }
 
 /** Queues a load and retains an asynchronous result until a file-loaded event arrives. */
@@ -855,6 +932,155 @@ mediakit_engine_get_chapters(MediaKitEngine *self)
 #endif
 }
 
+
+/** Reports source-specific DVD/Blu-ray title/edition metadata from libmpv. */
+GVariant *
+mediakit_engine_get_disc_titles(MediaKitEngine *self)
+{
+    GVariantBuilder titles;
+    g_return_val_if_fail(MEDIAKIT_IS_ENGINE(self), NULL);
+    g_variant_builder_init(&titles, G_VARIANT_TYPE("aa{sv}"));
+#ifdef MEDIAKIT_HAVE_MPV
+    if (self->player != NULL && self->disc_source && !self->closing) {
+        mpv_node root = {0};
+        const gchar *property = self->disc_menu_supported
+            ? "edition-list" : "disc-title-list";
+        const gchar *selection = self->disc_menu_supported ? "edition" : "disc-title";
+        gint64 selected = -1;
+        int status = mpv_get_property(self->player, property, MPV_FORMAT_NODE, &root);
+
+        if (status < 0 && self->disc_menu_supported) {
+            property = "disc-title-list";
+            selection = "disc-title";
+            status = mpv_get_property(self->player, property, MPV_FORMAT_NODE, &root);
+        }
+        mpv_get_property(self->player, selection, MPV_FORMAT_INT64, &selected);
+        if (status >= 0) {
+            if (root.format == MPV_FORMAT_NODE_ARRAY) {
+                int count = MIN(root.u.list->num, 512);
+                for (int index = 0; index < count; index++) {
+                    const mpv_node *item = &root.u.list->values[index];
+                    const mpv_node *duration;
+                    double seconds = 0.0;
+                    gchar *title;
+                    GVariantBuilder entry;
+                    if (item->format != MPV_FORMAT_NODE_MAP) {
+                        continue;
+                    }
+                    duration = find_node_member(item, "duration");
+                    if (duration != NULL && duration->format == MPV_FORMAT_DOUBLE) {
+                        seconds = duration->u.double_;
+                    } else if (duration != NULL && duration->format == MPV_FORMAT_INT64) {
+                        seconds = (double)duration->u.int64;
+                    }
+                    if (!isfinite(seconds) || seconds < 0.0 ||
+                        seconds >= (double)G_MAXINT64 / 1000000.0) {
+                        seconds = 0.0;
+                    }
+                    title = node_safe_text(find_node_member(item, "title"));
+                    g_variant_builder_init(&entry, G_VARIANT_TYPE_VARDICT);
+                    g_variant_builder_add(&entry, "{sv}", "index", g_variant_new_uint32(index));
+                    g_variant_builder_add(&entry, "{sv}", "title", g_variant_new_string(title));
+                    g_variant_builder_add(&entry, "{sv}", "duration-us",
+                                          g_variant_new_int64((gint64)(seconds * 1000000.0)));
+                    g_variant_builder_add(&entry, "{sv}", "selected",
+                                          g_variant_new_boolean(selected == index));
+                    g_variant_builder_add_value(&titles, g_variant_builder_end(&entry));
+                    g_free(title);
+                }
+            }
+            mpv_free_node_contents(&root);
+        }
+    }
+#endif
+    return g_variant_ref_sink(g_variant_builder_end(&titles));
+}
+
+/** Advertises menu command capability separately from current visible menu state. */
+GVariant *
+mediakit_engine_get_disc_status(MediaKitEngine *self)
+{
+    GVariantBuilder status;
+    gboolean supported = FALSE;
+    gboolean active = FALSE;
+    g_return_val_if_fail(MEDIAKIT_IS_ENGINE(self), NULL);
+    g_variant_builder_init(&status, G_VARIANT_TYPE_VARDICT);
+#ifdef MEDIAKIT_HAVE_MPV
+    if (self->player != NULL && self->disc_source && !self->closing) {
+        supported = self->disc_menu_supported;
+        if (supported) {
+            int flag = 0;
+            if (mpv_get_property(self->player, "disc-menu-active", MPV_FORMAT_FLAG,
+                                 &flag) >= 0) {
+                active = flag != 0;
+            }
+        }
+    }
+#endif
+    g_variant_builder_add(&status, "{sv}", "menu-supported",
+                          g_variant_new_boolean(supported));
+    g_variant_builder_add(&status, "{sv}", "menu-active",
+                          g_variant_new_boolean(active));
+    return g_variant_ref_sink(g_variant_builder_end(&status));
+}
+
+/** Selects an existing native disc title using modern or legacy mpv properties. */
+gboolean
+mediakit_engine_select_disc_title(MediaKitEngine *self, guint index, GError **error)
+{
+    g_return_val_if_fail(MEDIAKIT_IS_ENGINE(self), FALSE);
+#ifdef MEDIAKIT_HAVE_MPV
+    if (self->player != NULL && self->disc_source && !self->closing) {
+        gchar number[32];
+        const gchar *property = self->disc_menu_supported ? "edition" : "disc-title";
+        g_snprintf(number, sizeof(number), "%u", index);
+        const gchar *command[] = { "set", property, number, NULL };
+        int status = mpv_command_async(self->player, 31, command);
+        if (status >= 0) {
+            return TRUE;
+        }
+        set_mpv_error(error, status, "Unable to select disc title");
+        return FALSE;
+    }
+#endif
+    g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED,
+                        "No active DVD or Blu-ray title can be selected");
+    return FALSE;
+}
+
+/** Restricts navigation to libmpv 0.42+ discnav commands on active disc sources. */
+gboolean
+mediakit_engine_navigate_disc_menu(MediaKitEngine *self, const gchar *action,
+                                   GError **error)
+{
+    const gchar *accepted[] = { "up", "down", "left", "right", "select",
+                                "prev", "menu", NULL };
+    gboolean valid = FALSE;
+    g_return_val_if_fail(MEDIAKIT_IS_ENGINE(self), FALSE);
+    for (guint index = 0; accepted[index] != NULL; index++) {
+        valid |= g_strcmp0(action, accepted[index]) == 0;
+    }
+    if (!valid) {
+        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT,
+                            "Unknown optical disc menu operation");
+        return FALSE;
+    }
+#ifdef MEDIAKIT_HAVE_MPV
+    if (self->player != NULL && self->disc_source &&
+        self->disc_menu_supported && !self->closing) {
+        const char *command[] = { "discnav", action, NULL };
+        int status = mpv_command_async(self->player, 31, command);
+        if (status >= 0) {
+            return TRUE;
+        }
+        set_mpv_error(error, status, "Unable to navigate disc menu");
+        return FALSE;
+    }
+#endif
+    g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED,
+                        "Interactive disc menu navigation is unavailable");
+    return FALSE;
+}
 
 #ifdef MEDIAKIT_HAVE_MPV
 /** Copies only known primitive mpv metadata types into a GLib variant dictionary. */

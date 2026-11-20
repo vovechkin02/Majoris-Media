@@ -64,6 +64,21 @@ if mpv.found()
 endif
 
 if mpv.found()
+  transport_test = executable(
+    'test-engine-transport',
+    'integration/engine-transport.vala',
+    dependencies: [core_api],
+  )
+  test(
+    'media-engine-standalone-m2ts',
+    transport_test,
+    args: [meson.current_source_dir() / 'fixtures/standalone-reference.m2ts'],
+    suite: 'integration',
+    timeout: 15,
+  )
+endif
+
+if mpv.found()
   audio_test = executable(
     'test-engine-audio',
     'integration/engine-audio.vala',

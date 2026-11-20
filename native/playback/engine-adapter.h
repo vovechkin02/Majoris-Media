@@ -71,6 +71,58 @@ gboolean mediakit_engine_select_audio_device(MediaKitEngine *self,
                                                 const gchar *device_id,
                                                 GError **error);
 
+/** mediakit_engine_prepare_disc:
+ * @self: Operational engine before loading a disc.
+ * @kind: Exactly "dvd" or "bluray".
+ * @path: Absolute local device path, directory, or ISO image filename.
+ * @require_menu: Whether opening requires mpv 0.42+ menu handling.
+ * @error: (out) (optional): Unsupported menu or invalid device/path.
+ *
+ * Sets a separate mpv disc-device option; callers must not concatenate paths
+ * into synthetic disc URLs. This operation does not attempt AACS decryption.
+ * Returns: TRUE when the device selection is accepted.
+ */
+gboolean mediakit_engine_prepare_disc(MediaKitEngine *self,
+                                       const gchar *kind,
+                                       const gchar *path,
+                                       gboolean require_menu,
+                                       GError **error);
+
+/** mediakit_engine_get_disc_titles:
+ * @self: Active native engine.
+ *
+ * Returns: (transfer full): `aa{sv}` disc title/edition snapshots; may be empty.
+ */
+GVariant *mediakit_engine_get_disc_titles(MediaKitEngine *self);
+
+/** mediakit_engine_get_disc_status:
+ * @self: Active native engine.
+ *
+ * Returns: (transfer full): `a{sv}` with menu support/activity separately.
+ */
+GVariant *mediakit_engine_get_disc_status(MediaKitEngine *self);
+
+/** mediakit_engine_select_disc_title:
+ * @self: Active native engine.
+ * @index: Zero-based, discovered title/edition index.
+ * @error: (out) (optional): Invalid selection or unsupported source.
+ *
+ * Returns: TRUE when the selection has been queued; watch for metadata events.
+ */
+gboolean mediakit_engine_select_disc_title(MediaKitEngine *self, guint index,
+                                            GError **error);
+
+/** mediakit_engine_navigate_disc_menu:
+ * @self: Active native engine.
+ * @action: Exact validated action from the backend's closed vocabulary.
+ * @error: (out) (optional): Unsupported menu or invalid action.
+ *
+ * Returns: TRUE when the nonblocking command was queued, not when acted upon.
+ */
+gboolean mediakit_engine_navigate_disc_menu(MediaKitEngine *self,
+                                             const gchar *action,
+                                             GError **error);
+
 /** mediakit_engine_load_async:
  * @self: Engine for one playback session.
  * @uri: Validated file, HTTP, or HTTPS URI.

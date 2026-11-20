@@ -26,6 +26,22 @@ namespace MediaKitNative {
         public async bool load_async (string uri, GLib.Cancellable? cancellable = null)
                                       throws GLib.Error;
 
+        /** Configures a local optical-disc device or image before the next load. */
+        public bool prepare_disc (string kind, string path, bool require_menu)
+                                  throws GLib.Error;
+
+        /** Returns a typed array of disc titles or editions available for selection. */
+        public GLib.Variant get_disc_titles ();
+
+        /** Reports separate menu capability and current menu activity. */
+        public GLib.Variant get_disc_status ();
+
+        /** Requests a verified title/edition index on the active disc. */
+        public bool select_disc_title (uint index) throws GLib.Error;
+
+        /** Queues a validated navigation command when menu support exists. */
+        public bool navigate_disc_menu (string action) throws GLib.Error;
+
         /** Resumes native media playback. */
         public bool play () throws GLib.Error;
 

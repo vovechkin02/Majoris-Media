@@ -1,3 +1,13 @@
+majoris-media (0.6.0-1) unstable; urgency=medium
+
+  * Add typed DVD and Blu-ray source definitions with native device-path routing.
+  * Add independent standalone M2TS transport-stream opening and reference media.
+  * Expose native disc editions/titles and bounded selection commands.
+  * Add conditional mpv 0.42 disc-menu navigation, GTK selectors, and keyboard handling.
+  * Preserve headless playback Core, prior API compatibility and honest capability status.
+
+ -- Majoris Maintainers <maintainers@invalid.example>  Fri, 20 Nov 2026 18:50:00 +1100
+
 majoris-media (0.5.0-1) unstable; urgency=medium
 
   * Add typed multichannel source and output audio telemetry and output discovery.

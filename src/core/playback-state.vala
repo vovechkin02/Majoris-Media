@@ -25,7 +25,55 @@ namespace MediaKit {
         /** A local GIO file. */
         LOCAL_FILE,
         /** An HTTP or HTTPS resource. */
-        NETWORK
+        NETWORK,
+        /** Standalone local MPEG transport stream, including M2TS; no disc dependency. */
+        TRANSPORT_STREAM,
+        /** A local DVD disc, directory, or explicitly identified DVD ISO image. */
+        DVD_DISC,
+        /** A local Blu-ray/UHD Blu-ray disc, directory, or identified ISO image. */
+        BLURAY_DISC
+    }
+
+    /** Distinguishes optical disc format without trying to infer it from an ISO suffix. */
+    public enum DiscKind {
+        /** Not an optical disc source. */
+        NONE,
+        /** DVD-Video source. */
+        DVD,
+        /** Blu-ray or UHD Blu-ray source. */
+        BLURAY
+    }
+
+    /** Determines which disc entry is requested at initial load. */
+    public enum DiscStartMode {
+        /** Choose the longest available title or playlist. */
+        LONGEST,
+        /** Choose the first available title. */
+        FIRST,
+        /** Enter the interactive menu when a suitable engine supports it. */
+        MENU,
+        /** Select an explicit zero-based title index. */
+        TITLE,
+        /** Open the specified five-digit Blu-ray MPLS playlist number. */
+        PLAYLIST
+    }
+
+    /** Narrow set of validated optical-disc navigation commands. */
+    public enum DiscMenuAction {
+        /** Move menu focus upward. */
+        UP,
+        /** Move menu focus downward. */
+        DOWN,
+        /** Move menu focus left. */
+        LEFT,
+        /** Move menu focus right. */
+        RIGHT,
+        /** Activate the focused menu item. */
+        SELECT,
+        /** Return to the previous menu. */
+        BACK,
+        /** Navigate to a disc's top-level menu. */
+        MENU
     }
 
     /** Categorizes individual stream tracks, independent of container type. */

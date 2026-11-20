@@ -20,6 +20,10 @@ CLI. It contains no third-party creative media. Use `ffprobe` to inspect stream
 metadata when adding new assertions. These two short samples are **not** a codec,
 HDR, audio passthrough or performance benchmark suite.
 
+Stage 6 adds `standalone-reference.m2ts`: a one-second, synthetic 96×64 MPEG-2
+video plus mono MP2 sound in 192-byte-packet Blu-ray M2TS transport framing.
+It is not a Blu-ray title or a protected optical-disc fixture.
+
 Stage 5 adds two original synthetic multichannel references:
 
 - `surround-5.1.flac` — 0.45 seconds, 48 kHz, six-channel 5.1 lossless FLAC.

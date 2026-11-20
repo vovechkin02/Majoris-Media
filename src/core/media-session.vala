@@ -75,6 +75,25 @@ namespace MediaKit {
             }
         }
 
+        /** Disc titles/editions, empty for ordinary media and when not discoverable. */
+        public ListModel disc_titles {
+            get {
+                return disc_title_store;
+            }
+        }
+
+        /** Whether the native engine supports interactive disc-menu commands. */
+        public bool disc_menu_supported { get; private set; default = false; }
+
+        /** True only when the engine reports a disc menu is currently visible. */
+        public bool disc_menu_active { get; private set; default = false; }
+
+        /** Emitted when actual disc title/edition inventory changes. */
+        public signal void disc_titles_changed ();
+
+        /** Emitted when menu activity or support changes. */
+        public signal void disc_menu_changed (bool supported, bool active);
+
         /** Current chapter descriptors in source order. */
         public ListModel chapters {
             get {
@@ -136,6 +155,9 @@ namespace MediaKit {
         /** Mutable backing store hidden behind the public read-only chapter model. */
         private ListStore chapter_store;
 
+        /** Mutable collection of discovered optical disc titles or editions. */
+        private ListStore disc_title_store;
+
         /** Owns audio output device inventory, exposed as a read-only ListModel. */
         private ListStore audio_device_store;
 
@@ -159,6 +181,7 @@ namespace MediaKit {
             Object (options: options ?? new PlaybackOptions ());
             track_store = new ListStore (typeof (MediaTrack));
             chapter_store = new ListStore (typeof (MediaChapter));
+            disc_title_store = new ListStore (typeof (DiscTitle));
             audio_device_store = new ListStore (typeof (AudioDevice));
             source_audio = new AudioInformation ();
             audio_output = new AudioOutputInformation ();
@@ -218,6 +241,7 @@ namespace MediaKit {
                     throw new IOError.CANCELLED ("Media load was superseded");
                 }
                 refresh_live_metadata ();
+                refresh_disc_metadata ();
                 refresh_video_color ();
                 refresh_audio_information ();
                 refresh_audio_devices ();
@@ -367,6 +391,38 @@ namespace MediaKit {
             backend.select_chapter (index);
         }
 
+        /** Selects a discovered DVD or Blu-ray title without changing source identity. */
+        public void select_disc_title (uint index) throws Error {
+            ensure_media_ready ();
+            if (source == null || !source.is_disc) {
+                throw new MediaError.UNSUPPORTED ("Current source is not an optical disc");
+            }
+            bool exists = false;
+            for (uint position = 0; position < disc_title_store.get_n_items (); position++) {
+                var title = (DiscTitle) disc_title_store.get_item (position);
+                if (title.index == index) {
+                    exists = true;
+                    break;
+                }
+            }
+            if (!exists) {
+                throw new MediaError.INVALID_ARGUMENT ("Disc title is not in the inventory");
+            }
+            backend.select_disc_title (index);
+        }
+
+        /** Sends a disc-menu command only when the active disc supports navigation. */
+        public void navigate_disc_menu (DiscMenuAction action) throws Error {
+            ensure_media_ready ();
+            if (source == null || !source.is_disc || !disc_menu_supported) {
+                throw new MediaError.UNSUPPORTED ("Disc navigation is unavailable");
+            }
+            if (action != DiscMenuAction.MENU && !disc_menu_active) {
+                throw new MediaError.UNSUPPORTED ("No interactive disc menu is active");
+            }
+            backend.navigate_disc_menu (action);
+        }
+
         /** Finds the actual selected track ID, or null if the type is disabled. */
         public string? selected_track_id (TrackKind kind) {
             for (uint index = 0; index < track_store.get_n_items (); index++) {
@@ -460,6 +516,7 @@ namespace MediaKit {
                 if (owner != null && owner.source != null &&
                     owner.state != PlaybackState.EMPTY) {
                     owner.refresh_live_metadata ();
+                    owner.refresh_disc_metadata ();
                 }
             });
             backend_handlers += backend.buffering_changed.connect ((active, percent) => {
@@ -709,6 +766,13 @@ namespace MediaKit {
             }
             track_store.remove_all ();
             chapter_store.remove_all ();
+            disc_title_store.remove_all ();
+            disc_titles_changed ();
+            if (disc_menu_supported || disc_menu_active) {
+                disc_menu_supported = false;
+                disc_menu_active = false;
+                disc_menu_changed (false, false);
+            }
             tracks_changed ();
             chapters_changed ();
             update_buffering (false, -1);
@@ -728,6 +792,44 @@ namespace MediaKit {
             if (!subtitles_visible) {
                 subtitles_visible = true;
                 subtitle_visibility_changed (true);
+            }
+        }
+
+        /** Updates disc title inventory and menu status without parsing log messages. */
+        private void refresh_disc_metadata () {
+            if (source == null || !source.is_disc) {
+                return;
+            }
+            try {
+                var native_titles = backend.get_disc_titles ();
+                var native_status = backend.get_disc_status ();
+                var next_titles = new ListStore (typeof (DiscTitle));
+                for (size_t position = 0; position < native_titles.n_children (); position++) {
+                    var item = native_titles.get_child_value (position);
+                    var index_value = item.lookup_value ("index", new VariantType ("u"));
+                    var duration = item.lookup_value ("duration-us", new VariantType ("x"));
+                    if (index_value == null || duration == null) {
+                        continue;
+                    }
+                    next_titles.append (new DiscTitle (
+                        index_value.get_uint32 (), read_string (item, "title"),
+                        duration.get_int64 (), read_flag (item, "selected")
+                    ));
+                }
+                disc_title_store.remove_all ();
+                for (uint index = 0; index < next_titles.get_n_items (); index++) {
+                    disc_title_store.append (next_titles.get_item (index));
+                }
+                disc_titles_changed ();
+                bool supported = read_flag (native_status, "menu-supported");
+                bool active = read_flag (native_status, "menu-active");
+                if (disc_menu_supported != supported || disc_menu_active != active) {
+                    disc_menu_supported = supported;
+                    disc_menu_active = active;
+                    disc_menu_changed (supported, active);
+                }
+            } catch (Error error) {
+                warning ("Could not refresh disc metadata: %s", error.message);
             }
         }
 

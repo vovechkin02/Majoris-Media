@@ -153,7 +153,17 @@ namespace MediaKit {
             if (closed) {
                 throw new IOError.CANCELLED ("The playback backend was closed");
             }
-            yield engine.load_async (source.uri, cancellable);
+            if (source.is_disc) {
+                var path = source.file.get_path ();
+                if (path == null) {
+                    throw new MediaError.INVALID_SOURCE ("Disc source has no local device path");
+                }
+                engine.prepare_disc (
+                    source.disc_kind == DiscKind.DVD ? "dvd" : "bluray",
+                    path, source.disc_start == DiscStartMode.MENU
+                );
+            }
+            yield engine.load_async (source.engine_uri (), cancellable);
             if (closed) {
                 throw new IOError.CANCELLED ("Media loading was superseded");
             }
@@ -249,6 +259,56 @@ namespace MediaKit {
         public void set_subtitles_visible (bool visible) throws Error {
             ensure_open ();
             engine.set_subtitles_visible (visible);
+        }
+
+        /** Reads optical-disc titles using the available native property family. */
+        public Variant get_disc_titles () throws Error {
+            ensure_open ();
+            return engine.get_disc_titles ();
+        }
+
+        /** Reads menu support and menu activity separately from file decoding. */
+        public Variant get_disc_status () throws Error {
+            ensure_open ();
+            return engine.get_disc_status ();
+        }
+
+        /** Selects a title/edition; native observations confirm the result later. */
+        public void select_disc_title (uint index) throws Error {
+            ensure_open ();
+            engine.select_disc_title (index);
+        }
+
+        /** Converts typed navigation actions to the closed native command vocabulary. */
+        public void navigate_disc_menu (DiscMenuAction action) throws Error {
+            ensure_open ();
+            string command;
+            switch (action) {
+            case DiscMenuAction.UP:
+                command = "up";
+                break;
+            case DiscMenuAction.DOWN:
+                command = "down";
+                break;
+            case DiscMenuAction.LEFT:
+                command = "left";
+                break;
+            case DiscMenuAction.RIGHT:
+                command = "right";
+                break;
+            case DiscMenuAction.SELECT:
+                command = "select";
+                break;
+            case DiscMenuAction.BACK:
+                command = "prev";
+                break;
+            case DiscMenuAction.MENU:
+                command = "menu";
+                break;
+            default:
+                throw new MediaError.INVALID_ARGUMENT ("Unknown menu navigation action");
+            }
+            engine.navigate_disc_menu (command);
         }
 
         /** Creates a GL renderer; the GTK owner must hold a current GL context. */

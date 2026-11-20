@@ -80,6 +80,20 @@
       </object>
     </child>
     <child>
+      <object class="GtkMenuButton" id="disc_titles_menu">
+        <property name="label">Titles</property>
+        <property name="sensitive">False</property>
+        <property name="tooltip-text">Select an optical-disc title or playlist</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuButton" id="disc_navigation_menu">
+        <property name="label">Disc menu</property>
+        <property name="sensitive">False</property>
+        <property name="tooltip-text">Navigate the interactive disc menu</property>
+      </object>
+    </child>
+    <child>
       <object class="GtkLabel" id="status_label">
         <property name="label">00:00 / 00:00</property>
         <property name="xalign">1</property>

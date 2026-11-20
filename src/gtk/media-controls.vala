@@ -40,6 +40,14 @@ namespace MediaKitGtk {
                     chapters_handler_id = current_session.chapters_changed.connect (() => {
                         weak_owner?.update_track_menus ();
                     });
+                    disc_titles_handler_id = current_session.disc_titles_changed.connect (() => {
+                        weak_owner?.update_track_menus ();
+                    });
+                    disc_menu_handler_id = current_session.disc_menu_changed.connect (
+                        (supported, active) => {
+                            weak_owner?.update_track_menus ();
+                        }
+                    );
                     chapter_handler_id = current_session.chapter_changed.connect ((index) => {
                         weak_owner?.update_track_menus ();
                     });
@@ -103,6 +111,14 @@ namespace MediaKitGtk {
         [GtkChild]
         private unowned Gtk.MenuButton chapter_menu;
 
+        /** Optical-disc title or MPLS edition chooser. */
+        [GtkChild]
+        private unowned Gtk.MenuButton disc_titles_menu;
+
+        /** Optical-disc menu navigation actions. */
+        [GtkChild]
+        private unowned Gtk.MenuButton disc_navigation_menu;
+
         /** Dynamic stream rows owned by each GTK popover. */
         private Gtk.Box video_list;
 
@@ -117,6 +133,12 @@ namespace MediaKitGtk {
 
         /** Dynamic source chapter rows. */
         private Gtk.Box chapter_list;
+
+        /** Disc title rows exposed by the optional GTK popover. */
+        private Gtk.Box disc_titles_list;
+
+        /** Disc navigation buttons exposed only for supported engines. */
+        private Gtk.Box disc_navigation_list;
 
         /** Owned session whose observers are disconnected upon replacement. */
         private MediaKit.MediaSession? current_session;
@@ -141,6 +163,12 @@ namespace MediaKitGtk {
 
         /** Subscription for chapter-list changes. */
         private ulong chapters_handler_id = 0;
+
+        /** Subscription for discovered optical-disc titles. */
+        private ulong disc_titles_handler_id = 0;
+
+        /** Subscription for interactive menu support and visibility. */
+        private ulong disc_menu_handler_id = 0;
 
         /** Subscription for active chapter navigation. */
         private ulong chapter_handler_id = 0;
@@ -182,6 +210,8 @@ namespace MediaKitGtk {
             audio_output_list = configure_popover (audio_output_menu);
             subtitle_list = configure_popover (subtitle_menu);
             chapter_list = configure_popover (chapter_menu);
+            disc_titles_list = configure_popover (disc_titles_menu);
+            disc_navigation_list = configure_popover (disc_navigation_menu);
             update_controls ();
         }
 
@@ -511,6 +541,87 @@ namespace MediaKitGtk {
             }
         }
 
+        /** Presents engine-discovered disc titles without guessing playlist indices. */
+        private void populate_disc_titles () {
+            clear_rows (disc_titles_list);
+            if (current_session == null || current_session.source == null ||
+                !current_session.source.is_disc) {
+                return;
+            }
+            Gtk.CheckButton? first = null;
+            for (uint position = 0; position < current_session.disc_titles.get_n_items ();
+                 position++) {
+                var title = (MediaKit.DiscTitle) current_session.disc_titles.get_item (position);
+                uint index = title.index;
+                string caption = title.name != "" ? title.name
+                    : "Title %u".printf (index + 1);
+                var choice = new Gtk.CheckButton.with_label (caption);
+                if (first == null) {
+                    first = choice;
+                } else {
+                    choice.set_group (first);
+                }
+                choice.set_active (title.selected);
+                weak MediaControls weak_owner = this;
+                weak Gtk.CheckButton weak_choice = choice;
+                choice.toggled.connect (() => {
+                    var owner = weak_owner;
+                    var active_choice = weak_choice;
+                    if (owner == null || owner.current_session == null ||
+                        active_choice == null || !active_choice.get_active ()) {
+                        return;
+                    }
+                    try {
+                        owner.current_session.select_disc_title (index);
+                    } catch (Error error) {
+                        owner.status_label.tooltip_text = error.message;
+                    }
+                });
+                disc_titles_list.append (choice);
+            }
+        }
+
+        /** Populates menu navigation commands while preserving widget lifetimes. */
+        private void populate_disc_navigation () {
+            clear_rows (disc_navigation_list);
+            if (current_session == null || !current_session.disc_menu_supported) {
+                return;
+            }
+            append_disc_action ("Top menu", MediaKit.DiscMenuAction.MENU, true);
+            append_disc_action ("Up", MediaKit.DiscMenuAction.UP,
+                                current_session.disc_menu_active);
+            append_disc_action ("Down", MediaKit.DiscMenuAction.DOWN,
+                                current_session.disc_menu_active);
+            append_disc_action ("Left", MediaKit.DiscMenuAction.LEFT,
+                                current_session.disc_menu_active);
+            append_disc_action ("Right", MediaKit.DiscMenuAction.RIGHT,
+                                current_session.disc_menu_active);
+            append_disc_action ("Select", MediaKit.DiscMenuAction.SELECT,
+                                current_session.disc_menu_active);
+            append_disc_action ("Back", MediaKit.DiscMenuAction.BACK,
+                                current_session.disc_menu_active);
+        }
+
+        /** Adds a validated disc-menu action with a weak owner callback. */
+        private void append_disc_action (string label, MediaKit.DiscMenuAction action,
+                                         bool enabled) {
+            var button = new Gtk.Button.with_label (label);
+            button.sensitive = enabled;
+            weak MediaControls weak_owner = this;
+            button.clicked.connect (() => {
+                var owner = weak_owner;
+                if (owner == null || owner.current_session == null) {
+                    return;
+                }
+                try {
+                    owner.current_session.navigate_disc_menu (action);
+                } catch (Error error) {
+                    owner.status_label.tooltip_text = error.message;
+                }
+            });
+            disc_navigation_list.append (button);
+        }
+
         /** Keeps presentation menus synchronized with actual engine metadata. */
         private void update_track_menus () {
             populate_tracks (video_list, MediaKit.TrackKind.VIDEO);
@@ -518,6 +629,8 @@ namespace MediaKitGtk {
             update_audio_output_menu ();
             populate_tracks (subtitle_list, MediaKit.TrackKind.SUBTITLE);
             populate_chapters ();
+            populate_disc_titles ();
+            populate_disc_navigation ();
             bool ready = current_session != null && current_session.source != null &&
                 current_session.state != MediaKit.PlaybackState.OPENING &&
                 current_session.state != MediaKit.PlaybackState.ERROR;
@@ -545,6 +658,10 @@ namespace MediaKitGtk {
             subtitle_menu.sensitive = ready && subtitle_count > 0;
             chapter_menu.sensitive = ready && current_session != null &&
                 current_session.chapters.get_n_items () > 0;
+            disc_titles_menu.sensitive = ready && current_session != null &&
+                current_session.disc_titles.get_n_items () > 0;
+            disc_navigation_menu.sensitive = ready && current_session != null &&
+                current_session.disc_menu_supported;
         }
 
         /** Disconnects old subscriptions and cancels pending debounce on replacement. */
@@ -585,6 +702,14 @@ namespace MediaKitGtk {
                 if (chapter_handler_id != 0) {
                     SignalHandler.disconnect (current_session, chapter_handler_id);
                     chapter_handler_id = 0;
+                }
+                if (disc_titles_handler_id != 0) {
+                    SignalHandler.disconnect (current_session, disc_titles_handler_id);
+                    disc_titles_handler_id = 0;
+                }
+                if (disc_menu_handler_id != 0) {
+                    SignalHandler.disconnect (current_session, disc_menu_handler_id);
+                    disc_menu_handler_id = 0;
                 }
                 if (subtitles_handler_id != 0) {
                     SignalHandler.disconnect (current_session, subtitles_handler_id);

@@ -103,7 +103,13 @@ namespace MediaKitGtk {
         /** Subscribes to GL context lifecycle and registers the frame draw callback. */
         construct {
             render_area.set_auto_render (false);
+            render_area.set_focusable (true);
             weak MediaView weak_owner = this;
+            var key_controller = new Gtk.EventControllerKey ();
+            key_controller.key_pressed.connect ((keyval, keycode, state) => {
+                return weak_owner != null && weak_owner.handle_disc_key (keyval);
+            });
+            render_area.add_controller (key_controller);
             render_area.realize.connect (() => {
                 weak_owner?.on_realize ();
             });
@@ -114,6 +120,50 @@ namespace MediaKitGtk {
                 return weak_owner == null || weak_owner.render_frame ();
             });
             update_status ();
+        }
+
+        /** Routes directional keys only while an interactive disc menu is active. */
+        private bool handle_disc_key (uint keyval) {
+            if (current_session == null || !current_session.disc_menu_supported) {
+                return false;
+            }
+            MediaKit.DiscMenuAction action;
+            if (keyval == Gdk.Key.F10) {
+                action = MediaKit.DiscMenuAction.MENU;
+            } else {
+                if (!current_session.disc_menu_active) {
+                    return false;
+                }
+                switch (keyval) {
+                case Gdk.Key.Up:
+                    action = MediaKit.DiscMenuAction.UP;
+                    break;
+                case Gdk.Key.Down:
+                    action = MediaKit.DiscMenuAction.DOWN;
+                    break;
+                case Gdk.Key.Left:
+                    action = MediaKit.DiscMenuAction.LEFT;
+                    break;
+                case Gdk.Key.Right:
+                    action = MediaKit.DiscMenuAction.RIGHT;
+                    break;
+                case Gdk.Key.Return:
+                case Gdk.Key.KP_Enter:
+                    action = MediaKit.DiscMenuAction.SELECT;
+                    break;
+                case Gdk.Key.Escape:
+                    action = MediaKit.DiscMenuAction.BACK;
+                    break;
+                default:
+                    return false;
+                }
+            }
+            try {
+                current_session.navigate_disc_menu (action);
+            } catch (Error error) {
+                warning ("Disc navigation rejected: %s", error.message);
+            }
+            return true;
         }
 
         /** Creates a renderer after GTK has established a valid OpenGL context. */

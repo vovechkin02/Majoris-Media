@@ -1,6 +1,6 @@
 # Majoris Media
 
-**Version:** 0.5.0 (Stage 5 multichannel audio and conservative passthrough) · **API namespaces:** `MediaKit-1.0`,
+**Version:** 0.6.0 (Stage 6 optical-disc source routing and navigation) · **API namespaces:** `MediaKit-1.0`,
 `MediaKitGtk-1.0` · **Platform:** Majoris OS / Debian 13 · **License:** GPL-3.0-or-later
 
 Majoris Media is a reusable audio/video playback foundation for Majoris applications.
@@ -10,7 +10,7 @@ libmpv, and a **GtkGLArea**-attached OpenGL renderer. Applications retain owners
 windows, playlists, toolbars, persistent settings, and fullscreen policy.
 
 > **Verification status:** This is source implementation, not a validated release.
-> Stage 5 static checks passed, but Vala, Meson, libmpv and GTK4 development
+> Stage 6 static checks passed, but Vala, Meson, libmpv and GTK4 development
 > packages were unavailable in the authoring environment. Native compilation,
 > runtime playback, GTK rendering, ICC processing and hardware output are
 > **not verified**.
@@ -31,7 +31,7 @@ windows, playlists, toolbars, persistent settings, and fullscreen policy.
 
 ## Current implementation
 
-| Area | Stage 5 status |
+| Area | Stage 6 status |
 | --- | --- |
 | Local file and HTTP(S) source identity | Implemented; scheme validated before playback |
 | Per-session native engine | libmpv adapter implemented; independent handles |
@@ -58,7 +58,9 @@ windows, playlists, toolbars, persistent settings, and fullscreen policy.
 | Compressed passthrough | Explicit endpoint and receiver-approved AC-3, E-AC-3, TrueHD, DTS, DTS-HD allowlist; default is PCM |
 | Physical receiver validation | **Not implemented**; encoded output is an engine observation, not verified Atmos/DTS:X |
 | Dolby Vision FEL / native HDR / Atmos / DTS:X rendering | Not qualified; output capabilities explicitly unverified |
-| Blu-ray navigation | Not implemented; dedicated later stage |
+| DVD/Blu-ray title navigation | Typed disc source, titles/editions, and selection implemented; real discs not qualified |
+| DVD/Blu-ray menus | Conditional mpv 0.42+ `discnav` commands and GTK controls; hardware/disc testing pending |
+| Standalone M2TS | Independent local transport stream path and synthetic sample |
 
 `-Dmpv=enabled` is the default and **requires** libmpv and libepoxy development
 packages; missing dependencies stop configuration rather than silently generating a
@@ -69,7 +71,7 @@ for API development and headless testing.
 
 Decoding capability is supplied by the installed libmpv build and its FFmpeg
 libraries. **No blanket format/codec or hardware-decoding guarantee is made.**
-Stage 5 retains a PCM WAV smoke fixture plus a tiny generated MKV with two
+Stage 6 retains a PCM WAV smoke fixture plus a tiny generated MKV with two
 PCM audio tracks, one MPEG-4 video track, subtitles and two chapters. This is
 not a complete format qualification matrix. Source HDR signaling is not equivalent to native
 HDR output; Atmos/DTS:X sources do not guarantee object-audio rendering or
@@ -77,7 +79,7 @@ encoded receiver passthrough. Read [formats](docs/formats.md).
 
 ## Dependencies and building
 
-Required with Stage 5 default options:
+Required with Stage 6 default options:
 
 - Meson >=1.4, Ninja, `valac`, C compiler, GLib/GIO >=2.76.
 - `libmpv-dev` and `libepoxy-dev` for the native engine and GL resolver.
@@ -264,7 +266,7 @@ The native smoke test opens a short PCM WAV; a separate representative generated
 MKV exercises live track/chapter discovery and track/visibility controls.
 Source validation, cancellation and GTK session binding are covered separately.
 See [testing](docs/TESTING.md) and the precise
-[Stage 5 verification report](docs/verification-stage5.md). No benchmarks are
+[Stage 6 verification report](docs/verification-stage6.md). No benchmarks are
 claimed; hardware decoding, 4K, HDR and receiver passthrough need target
 hardware qualification.
 
@@ -280,3 +282,16 @@ GoF participant boundaries, en-US identifiers, XML UI and focused tests.
 GPL-3.0-or-later; see [LICENSE](LICENSE). The repository does not vendor VLC,
 libmpv or FFmpeg source code. Their linked library licenses and dependencies
 must be evaluated for binary redistribution and Debian packaging.
+
+## Stage 6 — DVD, Blu-ray and standalone M2TS
+
+Stage 6 adds explicit DVD/Blu-ray source construction, isolated optical-disc
+device configuration, native disc-title/edition inventory and selection, and
+conditional interactive menu support on mpv 0.42+. `.m2ts` can be opened as a
+normal local file independently of a Blu-ray disc. `MediaKitGtk` optionally
+shows Titles and Disc Menu controls, with focus-aware keyboard navigation.
+
+Disc media playback depends on the installed libmpv/libbluray/DVD stack and
+source accessibility. No protected-disc decryption is bundled. See
+`docs/disc-playback.md` and `docs/verification-stage6.md` for the important
+limitations and release checks.

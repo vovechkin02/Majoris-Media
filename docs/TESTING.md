@@ -74,3 +74,13 @@ GIR generation and runtime tests are **NOT RUN**, not passed. See
 - Native compile/run **not performed** in the authoring container (valac,
   Meson, GLib/GTK4/libmpv development headers unavailable). See the precise
   check record in `verification-stage5.md`.
+
+## Stage 6 qualification
+
+Run the new `media-engine-standalone-m2ts` integration test on a libmpv-enabled
+build. Validate source constructors and error behavior through the Core unit
+test. For optical-disc qualification, separately check DVD, Blu-ray folder,
+Blu-ray ISO, title/playlist selection, chapter navigation and real disc menus
+on both stock Debian and an mpv 0.42+ build. Use only test media that can
+legally be accessed. For real disc drive testing, also verify cancellation,
+missing discs, source replacement and eject/reinsert behavior.

@@ -1,4 +1,4 @@
-# Playback format targets and qualification — Stage 5
+# Playback format targets and qualification — Stage 6
 
 Stage 5 delegates format selection and decoding to the installed libmpv/FFmpeg
 build. A codec being present upstream does **not** establish hardware decoder,
@@ -77,3 +77,14 @@ Two tiny, generated original audio fixtures provide representative 5.1 FLAC
 and E-AC-3 metadata. Neither carries Atmos/DTS:X object metadata. No
 proprietary encoders, receiver behavior, licensing keys or third-party tracks
 are embedded.
+
+## Stage 6: optical discs and transport streams
+
+- Standalone `.ts`, `.mts` and `.m2ts` use normal file demuxing; a dedicated
+  source constructor makes intent explicit.
+- Unencrypted/accessible DVD-Video and Blu-ray/UHD Blu-ray devices, folders
+  and explicitly identified ISO images are sent to libmpv's disc handlers.
+- DVD titles, Blu-ray playlist/index selection and source chapters are distinct.
+- Real menu navigation is conditional on mpv 0.42+ and its runtime setup;
+  BD-J support depends on external Java and libbluray installations.
+- Protected disc decryption and UHD HDR rendering are **not guaranteed**.

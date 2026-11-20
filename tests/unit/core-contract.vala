@@ -315,6 +315,94 @@ private void test_stage5_passthrough_preflight () {
     }
 }
 
+/** Disc sources retain local identity while rejecting invalid title/playlist modes. */
+private void test_stage6_disc_source_contract () {
+    try {
+        var dvd = new MediaKit.MediaSource.for_disc (
+            "/dev/sr0", MediaKit.DiscKind.DVD
+        );
+        assert (dvd.is_disc);
+        assert (dvd.kind == MediaKit.SourceKind.DVD_DISC);
+        assert (dvd.disc_start == MediaKit.DiscStartMode.LONGEST);
+        assert (dvd.uri.has_prefix ("file:"));
+        var bluray = new MediaKit.MediaSource.for_disc (
+            "/tmp/disc-image.iso", MediaKit.DiscKind.BLURAY,
+            MediaKit.DiscStartMode.PLAYLIST, 800
+        );
+        assert (bluray.kind == MediaKit.SourceKind.BLURAY_DISC);
+        assert (bluray.disc_selection == 800);
+        assert (bluray.is_disc);
+        var m2ts = new MediaKit.MediaSource.for_transport_stream (
+            "/tmp/demo.m2ts"
+        );
+        assert (!m2ts.is_disc);
+        assert (m2ts.kind == MediaKit.SourceKind.TRANSPORT_STREAM);
+        assert (m2ts.uri.has_prefix ("file:"));
+    } catch (Error error) {
+        assert_not_reached ();
+    }
+
+    bool rejected = false;
+    try {
+        var invalid = new MediaKit.MediaSource.for_disc (
+            "/dev/sr0", MediaKit.DiscKind.DVD,
+            MediaKit.DiscStartMode.PLAYLIST, 25
+        );
+        assert (invalid.disc_kind == MediaKit.DiscKind.DVD);
+    } catch (MediaKit.MediaError.INVALID_ARGUMENT error) {
+        rejected = true;
+    } catch (Error error) {
+        assert_not_reached ();
+    }
+    assert (rejected);
+
+    rejected = false;
+    try {
+        var invalid = new MediaKit.MediaSource.for_disc (
+            "/dev/sr0", MediaKit.DiscKind.BLURAY,
+            MediaKit.DiscStartMode.PLAYLIST, 100000
+        );
+        assert (invalid.disc_selection > 0);
+    } catch (MediaKit.MediaError.INVALID_ARGUMENT error) {
+        rejected = true;
+    } catch (Error error) {
+        assert_not_reached ();
+    }
+    assert (rejected);
+
+    rejected = false;
+    try {
+        var invalid = new MediaKit.MediaSource.for_disc (
+            "relative/path.iso", MediaKit.DiscKind.BLURAY
+        );
+        assert (invalid.is_disc);
+    } catch (MediaKit.MediaError.INVALID_SOURCE error) {
+        rejected = true;
+    } catch (Error error) {
+        assert_not_reached ();
+    }
+    assert (rejected);
+}
+
+/** Empty sessions never advertise optical-disc metadata or navigation capability. */
+private void test_stage6_empty_disc_session () {
+    var session = new MediaKit.MediaSession ();
+    assert (session.disc_titles.get_n_items () == 0);
+    assert (!session.disc_menu_supported);
+    assert (!session.disc_menu_active);
+    bool rejected = false;
+    try {
+        session.navigate_disc_menu (MediaKit.DiscMenuAction.MENU);
+    } catch (MediaKit.MediaError.INVALID_ARGUMENT error) {
+        rejected = true;
+    } catch (Error error) {
+        assert_not_reached ();
+    }
+    assert (rejected);
+    session.close ();
+    assert (session.disc_titles.get_n_items () == 0);
+}
+
 /** Registers small, deterministic public Core API checks. */
 int main (string[] args) {
     Test.init (ref args);
@@ -329,5 +417,7 @@ int main (string[] args) {
     Test.add_func ("/media/core/stage5-audio-metadata", test_stage5_audio_metadata);
     Test.add_func ("/media/core/stage5-empty-audio", test_stage5_empty_audio);
     Test.add_func ("/media/core/stage5-passthrough-preflight", test_stage5_passthrough_preflight);
+    Test.add_func ("/media/core/stage6-disc-sources", test_stage6_disc_source_contract);
+    Test.add_func ("/media/core/stage6-disc-session", test_stage6_empty_disc_session);
     return Test.run ();
 }

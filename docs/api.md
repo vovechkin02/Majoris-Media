@@ -1,9 +1,9 @@
-# Public API and operation contracts — Stage 5 (0.5.0)
+# Public API and operation contracts — Stage 6 (0.6.0)
 
 ## Stability and types
 
 Public namespaces remain `MediaKit-1.0` and `MediaKitGtk-1.0`; SONAME 0 is
-pre-release. Version 0.5.0 is not an ABI-stable production release.
+pre-release. Version 0.6.0 is not an ABI-stable production release.
 
 | Type | Role | Behavior in Stage 5 |
 | --- | --- | --- |
@@ -150,3 +150,18 @@ by libmpv and report `operation_failed`. In passthrough mode, switching to a
 new receiver is prohibited until the session is reopened with that receiver's
 approved codec allowlist. Events: `source_audio_changed`,
 `audio_output_changed`, and `audio_devices_changed`.
+
+## Stage 6: discs and standalone M2TS
+
+`MediaSource.for_transport_stream(path)` is a standalone MPEG transport-stream
+source. `MediaSource.for_disc(path, DiscKind.BLURAY, DiscStartMode.LONGEST)`
+and the DVD equivalent explicitly identify an optical-disc source or ISO. The
+`DiscStartMode.PLAYLIST` selector accepts numeric MPLS IDs on Blu-ray only.
+
+`MediaSession.disc_titles` exposes `DiscTitle` objects;
+`select_disc_title(index)` validates the current inventory.
+`disc_menu_supported` and `disc_menu_active` are separate, observed states.
+`navigate_disc_menu(DiscMenuAction)` raises a descriptive error where the
+required native menu support is not present.
+
+See `docs/disc-playback.md` for source selection and compatibility constraints.

@@ -92,6 +92,18 @@ namespace MediaKit {
         /** Controls subtitle visibility independently of selected subtitle track. */
         public abstract void set_subtitles_visible (bool visible) throws Error;
 
+        /** Disc title/edition snapshot; does not expose disc format internals. */
+        public abstract Variant get_disc_titles () throws Error;
+
+        /** Disc-menu support and active state, both observed separately. */
+        public abstract Variant get_disc_status () throws Error;
+
+        /** Selects an enumerated DVD/Blu-ray title/edition by its index. */
+        public abstract void select_disc_title (uint index) throws Error;
+
+        /** Navigates a disc menu only when the loaded engine supports that command. */
+        public abstract void navigate_disc_menu (DiscMenuAction action) throws Error;
+
         /** Creates one context-bound GL rendering endpoint when supported. */
         public abstract OpenGlOutput create_opengl_output () throws Error;
 

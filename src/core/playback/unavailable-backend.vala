@@ -128,6 +128,26 @@ namespace MediaKit {
             throw new MediaError.ENGINE_UNAVAILABLE (native_engine_unavailable_reason ());
         }
 
+        /** No disc title metadata exists without a loaded native engine. */
+        public Variant get_disc_titles () throws Error {
+            throw new MediaError.ENGINE_UNAVAILABLE (native_engine_unavailable_reason ());
+        }
+
+        /** No disc navigation can be observed without a native engine. */
+        public Variant get_disc_status () throws Error {
+            throw new MediaError.ENGINE_UNAVAILABLE (native_engine_unavailable_reason ());
+        }
+
+        /** Disc title selection is unavailable in this build. */
+        public void select_disc_title (uint index) throws Error {
+            throw new MediaError.ENGINE_UNAVAILABLE (native_engine_unavailable_reason ());
+        }
+
+        /** Disc menu commands are unavailable in this build. */
+        public void navigate_disc_menu (DiscMenuAction action) throws Error {
+            throw new MediaError.ENGINE_UNAVAILABLE (native_engine_unavailable_reason ());
+        }
+
         /** Refuses GL renderer creation without an operational native engine. */
         public OpenGlOutput create_opengl_output () throws Error {
             throw new MediaError.ENGINE_UNAVAILABLE (native_engine_unavailable_reason ());
