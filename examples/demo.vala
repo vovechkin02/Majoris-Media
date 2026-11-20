@@ -41,9 +41,10 @@ private class DemoApplication : Gtk.Application {
                 }
             });
         });
-        window.destroy.connect (() => {
+        window.close_request.connect (() => {
             advanced_window.close ();
             session.close ();
+            return false;
         });
 
         var open_button = new Gtk.Button.with_label ("Open Media");

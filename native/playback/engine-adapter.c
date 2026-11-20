@@ -7,7 +7,8 @@
 #include <stdlib.h>
 
 #ifdef MEDIAKIT_HAVE_MPV
-#include <epoxy/gl.h>
+#include <epoxy/egl.h>
+#include <epoxy/glx.h>
 #include <mpv/client.h>
 #include <mpv/render.h>
 #include <mpv/render_gl.h>
@@ -381,12 +382,15 @@ on_render_update(void *data)
     g_source_unref(source);
 }
 
-/** Resolves GL functions using the current GTK-owned OpenGL context. */
+/** Resolves GL functions through the current host context's EGL or GLX API. */
 static void *
 resolve_gl(void *context, const char *name)
 {
     (void)context;
-    return epoxy_get_proc_address(name);
+    if (epoxy_has_egl() && eglGetCurrentContext() != EGL_NO_CONTEXT) {
+        return (void *)eglGetProcAddress(name);
+    }
+    return (void *)glXGetProcAddressARB((const GLubyte *)name);
 }
 #endif
 
@@ -1621,8 +1625,9 @@ mediakit_renderer_set_icc_profile(MediaKitRenderer *self, GBytes *profile, GErro
     }
     blob.data = (void *)bytes;
     blob.size = size;
-    status = mpv_render_context_set_parameter(self->render_context,
-                                               MPV_RENDER_PARAM_ICC_PROFILE, &blob);
+    status = mpv_render_context_set_parameter(
+        self->render_context,
+        (mpv_render_param){ MPV_RENDER_PARAM_ICC_PROFILE, &blob });
     if (status < 0) {
         set_mpv_error(error, status, "Unable to configure display ICC profile");
         return FALSE;

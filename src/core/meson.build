@@ -28,25 +28,32 @@ core_sources = files(
   'rendering/gpu-next-launch-options.vala',
   'rendering/gpu-next-probe.vala',
   'rendering/gpu-next-window.vala',
-  '../../native/playback/engine-adapter.c',
   '../../native/playback/engine.vapi',
 )
 
-core_dependencies = [gio, json_glib]
-core_c_args = []
+engine_dependencies = [gio]
+engine_c_args = []
 if mpv.found()
-  core_dependencies += [mpv, epoxy]
-  core_c_args += ['-DMEDIAKIT_HAVE_MPV']
+  engine_dependencies += [mpv, epoxy]
+  engine_c_args += ['-DMEDIAKIT_HAVE_MPV']
   if experimental_embedded_gpu_next
-    core_c_args += ['-DMEDIAKIT_EXPERIMENTAL_EMBEDDED_GPU_NEXT']
+    engine_c_args += ['-DMEDIAKIT_EXPERIMENTAL_EMBEDDED_GPU_NEXT']
   endif
 endif
+
+engine_adapter = static_library(
+  'media-engine-adapter',
+  '../../native/playback/engine-adapter.c',
+  dependencies: engine_dependencies,
+  c_args: engine_c_args,
+  pic: true,
+)
 
 core_library = shared_library(
   'majoris-media',
   core_sources,
-  dependencies: core_dependencies,
-  c_args: core_c_args,
+  dependencies: [gio, gio_unix, json_glib],
+  link_whole: engine_adapter,
   include_directories: include_directories('../../native/playback'),
   vala_args: ['--shared-library=libmajoris-media.so.0', '--hide-internal'],
   version: meson.project_version(),

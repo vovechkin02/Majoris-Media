@@ -2,6 +2,14 @@
 namespace MediaKit {
     /** Owns a distinct Wayland mpv gpu-next process and a private local IPC channel. */
     public sealed class GpuNextWindow : Object {
+        /** Launches the exact argument vector through GLib's const-qualified C API. */
+        [CCode (cname = "g_subprocess_launcher_spawnv", cheader_filename = "gio/gio.h")]
+        private static extern Subprocess spawn_argv (
+            SubprocessLauncher launcher,
+            [CCode (array_length = false, array_null_terminated = true,
+                    type = "const gchar * const *")] string[] arguments
+        ) throws Error;
+
         /** True while an external playback process remains owned by this object. */
         public bool running { get; private set; default = false; }
 
@@ -95,7 +103,7 @@ namespace MediaKit {
                 var launcher = new SubprocessLauncher (
                     SubprocessFlags.STDOUT_SILENCE | SubprocessFlags.STDERR_SILENCE
                 );
-                var child = launcher.spawnv (launch_arguments);
+                var child = spawn_argv (launcher, launch_arguments);
                 launcher.close ();
                 process = child;
                 running = true;

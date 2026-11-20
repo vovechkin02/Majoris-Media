@@ -39,7 +39,7 @@ namespace MediaKit {
 
         /** Creates an unknown output snapshot before any actual rendering. */
         public VideoRenderingInformation () {
-            Object ();
+            Object (backend: "");
         }
 
         /** Parses renderer-local observations without inferring HDR scanout or Dolby Vision FEL. */

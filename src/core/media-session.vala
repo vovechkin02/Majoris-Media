@@ -117,7 +117,13 @@ namespace MediaKit {
         public bool is_seeking { get; private set; default = false; }
 
         /** Engine-observed subtitle rendering state, independent of track selection. */
-        public bool subtitles_visible { get; private set; default = true; }
+        public bool subtitles_visible {
+            get;
+            /** Stores the engine-observed state independently of the playback command. */
+            [CCode (cname = "media_kit_media_session_set_observed_subtitles_visible")]
+            private set;
+            default = true;
+        }
 
         /** Active decoder identifier, `no` for software or empty when unknown. */
         public string active_video_decoder { get; private set; default = ""; }
@@ -168,7 +174,7 @@ namespace MediaKit {
         private ListStore audio_device_store;
 
         /** Owns backend signal connection identifiers for deterministic disconnection. */
-        private ulong[] backend_handlers = {};
+        private ulong[] backend_handlers = null;
 
         /** Immutable safety decision for the current native engine's passthrough mode. */
         private bool active_passthrough = false;
@@ -662,10 +668,12 @@ namespace MediaKit {
                 var next_chapters = new ListStore (typeof (MediaChapter));
                 for (size_t index = 0; index < native_tracks.n_children (); index++) {
                     var item = native_tracks.get_child_value (index);
+                    var id = read_string (item, "id");
+                    if (id == "") {
+                        continue;
+                    }
                     TrackKind kind;
-                    string id = read_string (item, "id");
-                    if (id == "" || !parse_track_kind (read_string (item, "type"),
-                                                         out kind)) {
+                    if (!parse_track_kind (read_string (item, "type"), out kind)) {
                         continue;
                     }
                     next_tracks.append (new MediaTrack (
@@ -902,7 +910,7 @@ namespace MediaKit {
             foreach (var handler in backend_handlers) {
                 SignalHandler.disconnect (backend, handler);
             }
-            backend_handlers = {};
+            backend_handlers = null;
         }
 
         /** Cancels the superseded operation without canceling a caller-owned token. */

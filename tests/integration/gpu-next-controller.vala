@@ -1,3 +1,6 @@
+/** Command-line value supplied by Meson for this test process. */
+private static string support_path;
+
 /** Exercises the independently windowed player against a controlled local IPC double. */
 private void test_gpu_next_controller (string support_path) {
     var path = Environment.get_variable ("PATH") ?? "";
@@ -6,7 +9,8 @@ private void test_gpu_next_controller (string support_path) {
     var loop = new MainLoop ();
     var player = new MediaKit.GpuNextWindow ();
     bool finished = false;
-    uint timeout_id = Timeout.add_seconds (15, () => {
+    uint timeout_id = 0;
+    timeout_id = Timeout.add_seconds (15, () => {
         timeout_id = 0;
         player.close ();
         loop.quit ();
@@ -77,8 +81,9 @@ private void test_gpu_next_controller (string support_path) {
 int main (string[] args) {
     Test.init (ref args);
     assert (args.length == 2);
+    support_path = args[1];
     Test.add_func ("/media/integration/gpu-next-controller", () => {
-        test_gpu_next_controller (args[1]);
+        test_gpu_next_controller (support_path);
     });
     return Test.run ();
 }

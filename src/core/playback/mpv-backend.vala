@@ -8,56 +8,11 @@ namespace MediaKit {
             }
         }
 
-        /** Notifies the session when playback naturally reaches end-of-file. */
-        public signal void ended ();
-
-        /** Notifies the session of a runtime decode or media error. */
-        public signal void failed (string message);
-
-        /** Observed pause state coming from the native engine. */
-        public signal void pause_changed (bool paused);
-
-        /** Observed stream position in microseconds. */
-        public signal void position_changed (int64 position_us);
-
-        /** Observed stream duration in microseconds. */
-        public signal void duration_changed (int64 duration_us);
-
-        /** Stream metadata or selection changed in libmpv. */
-        public signal void metadata_changed ();
-
-        /** Cache underrun pause and percent, distinct from user pause. */
-        public signal void buffering_changed (bool active, int percent);
-
-        /** Engine seek or resynchronization notification. */
-        public signal void seeking_changed (bool active);
-
-        /** Engine-selected chapter index, -1 if not applicable. */
-        public signal void chapter_changed (int index);
-
-        /** Engine-observed subtitle display state. */
-        public signal void subtitle_visibility_changed (bool visible);
-
-        /** An asynchronous stream/visibility command was rejected. */
-        public signal void operation_failed (string message);
-
-        /** Active decoder observed directly from libmpv, not the requested policy. */
-        public signal void video_decoder_changed (string decoder);
-
-        /** Observed source and active audio output configuration changed. */
-        public signal void audio_metadata_changed ();
-
-        /** Audio output enumeration changed, for example after device hotplug. */
-        public signal void audio_devices_changed ();
-
-        /** Notifies the consumer when the libmpv source color metadata changes. */
-        public signal void color_metadata_changed ();
-
         /** Native engine lifetime belongs exclusively to this backend. */
         private MediaKitNative.Engine engine;
 
         /** Native signal subscriptions are disconnected before backend disposal. */
-        private ulong[] handlers = {};
+        private ulong[] handlers = null;
 
         /** Marks a backend retired by a subsequent open or close. */
         private bool closed = false;
@@ -335,7 +290,7 @@ namespace MediaKit {
             foreach (var handler in handlers) {
                 SignalHandler.disconnect (engine, handler);
             }
-            handlers = {};
+            handlers = null;
             engine.close ();
         }
 

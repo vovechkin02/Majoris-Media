@@ -34,15 +34,5 @@ namespace MediaKit {
             track_store = new ListStore (typeof (MediaTrack));
             chapter_store = new ListStore (typeof (MediaChapter));
         }
-
-        /** Adds a stream descriptor in the order returned by the backend. */
-        internal void append_track (MediaTrack track) {
-            track_store.append (track);
-        }
-
-        /** Adds a chapter descriptor in the order returned by the backend. */
-        internal void append_chapter (MediaChapter chapter) {
-            chapter_store.append (chapter);
-        }
     }
 }

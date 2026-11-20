@@ -30,7 +30,6 @@ if get_option('gtk')
     'media-gtk-contract',
     gtk_test,
     suite: 'integration',
-    env: ['GDK_BACKEND=headless'],
     timeout: 30,
   )
 endif
@@ -45,7 +44,6 @@ if experimental_gtk_pq
     'media-gtk-hdr-contract',
     hdr_widget_test,
     suite: 'integration',
-    env: ['GDK_BACKEND=headless'],
     timeout: 30,
   )
 endif

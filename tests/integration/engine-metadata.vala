@@ -1,3 +1,6 @@
+/** Command-line value supplied by Meson for this test process. */
+private static string fixture;
+
 /** Exercises the Stage 3 live metadata and independent playback control contract. */
 private void test_multistream_contract (string filename) {
     var session = new MediaKit.MediaSession ();
@@ -98,7 +101,7 @@ private void test_multistream_contract (string filename) {
 int main (string[] args) {
     Test.init (ref args);
     assert (args.length == 2);
-    string fixture = args[1];
+    fixture = args[1];
     Test.add_func ("/media/integration/multistream-metadata", () => {
         test_multistream_contract (fixture);
     });

@@ -26,7 +26,7 @@ namespace MediaKit {
 
         /** Constructs unknown source metadata. */
         public AudioInformation () {
-            Object ();
+            Object (codec: "", channel_layout: "", sample_format: "");
         }
 
         /** Creates a conservative snapshot from native stream and decoder metadata. */

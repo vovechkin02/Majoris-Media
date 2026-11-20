@@ -1,3 +1,6 @@
+/** Command-line value supplied by Meson for this test process. */
+private static string filename;
+
 /** Validates actual WAV loading and playback-control entry points through libmpv. */
 private void test_playback_roundtrip (string filename) {
     var loop = new MainLoop ();
@@ -47,7 +50,7 @@ private void test_playback_roundtrip (string filename) {
 int main (string[] args) {
     Test.init (ref args);
     assert (args.length == 2);
-    string filename = args[1];
+    filename = args[1];
     Test.add_func ("/media/integration/engine-playback", () => {
         test_playback_roundtrip (filename);
     });

@@ -16,7 +16,7 @@ namespace MediaKit {
             var launcher = new SubprocessLauncher (
                 SubprocessFlags.STDOUT_PIPE | SubprocessFlags.STDERR_SILENCE
             );
-            var process = launcher.spawnv ({ executable, "--version" });
+            var process = launcher.spawn (executable, "--version");
             launcher.close ();
             string? stdout_data = null;
             string? stderr_data = null;

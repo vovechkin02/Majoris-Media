@@ -1,3 +1,6 @@
+/** Command-line value supplied by Meson for this test process. */
+private static string filename;
+
 /** Qualifies the new engine options without claiming HDR output on headless audio. */
 private void test_video_policy_engine (string filename) {
     var options = new MediaKit.PlaybackOptions ();
@@ -6,7 +9,8 @@ private void test_video_policy_engine (string filename) {
     var session = new MediaKit.MediaSession (options);
     var loop = new MainLoop ();
     bool loaded = false;
-    uint watchdog_id = Timeout.add_seconds (10, () => {
+    uint watchdog_id = 0;
+    watchdog_id = Timeout.add_seconds (10, () => {
         Test.message ("Timed out waiting for video policy engine load");
         loop.quit ();
         return Source.REMOVE;
@@ -37,7 +41,7 @@ private void test_video_policy_engine (string filename) {
 int main (string[] args) {
     Test.init (ref args);
     assert (args.length == 2);
-    string filename = args[1];
+    filename = args[1];
     Test.add_func ("/media/integration/engine-video-policy", () => {
         test_video_policy_engine (filename);
     });

@@ -43,7 +43,7 @@ namespace MediaKit {
 
         /** Initializes an unavailable snapshot before any executable has been inspected. */
         public GpuNextCapabilities () {
-            Object ();
+            Object (executable: "", version: "");
         }
 
         /** Produces a truthful runtime candidate from version output and session identity. */

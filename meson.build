@@ -11,6 +11,7 @@ pkg = import('pkgconfig')
 gnome = import('gnome')
 
 gio = dependency('gio-2.0', version: '>=2.76')
+gio_unix = dependency('gio-unix-2.0', version: '>=2.76')
 json_glib = dependency('json-glib-1.0', version: '>=1.6')
 mpv = dependency('mpv', required: get_option('mpv'))
 epoxy = dependency('epoxy', required: mpv.found())

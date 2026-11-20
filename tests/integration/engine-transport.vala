@@ -1,9 +1,13 @@
+/** Command-line value supplied by Meson for this test process. */
+private static string filename;
+
 /** Opens a standalone 192-byte-packet M2TS fixture as a regular media source. */
 private void test_transport_stream (string filename) {
     var loop = new MainLoop ();
     var session = new MediaKit.MediaSession ();
     bool opened = false;
-    uint watchdog_id = Timeout.add_seconds (8, () => {
+    uint watchdog_id = 0;
+    watchdog_id = Timeout.add_seconds (8, () => {
         watchdog_id = 0;
         loop.quit ();
         return Source.REMOVE;
@@ -44,7 +48,7 @@ int main (string[] args) {
     if (args.length < 2) {
         return 2;
     }
-    string filename = args[1];
+    filename = args[1];
     Test.add_func ("/media/integration/stage6-standalone-m2ts", () => {
         test_transport_stream (filename);
     });

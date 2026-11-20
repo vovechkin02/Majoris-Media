@@ -8,48 +8,6 @@ namespace MediaKit {
             }
         }
 
-        /** Natural termination signal; never emitted by an unavailable engine. */
-        public signal void ended ();
-
-        /** Runtime error signal; load operations throw directly instead. */
-        public signal void failed (string message);
-
-        /** Pause-state signal; never emitted by an unavailable engine. */
-        public signal void pause_changed (bool paused);
-
-        /** Position signal; never emitted by an unavailable engine. */
-        public signal void position_changed (int64 position_us);
-
-        /** Duration signal; never emitted by an unavailable engine. */
-        public signal void duration_changed (int64 duration_us);
-
-        /** Metadata signal; never emitted when the backend is unavailable. */
-        public signal void metadata_changed ();
-
-        /** Buffering signal; never emitted when the backend is unavailable. */
-        public signal void buffering_changed (bool active, int percent);
-
-        /** Seeking signal; never emitted when the backend is unavailable. */
-        public signal void seeking_changed (bool active);
-
-        /** Chapter signal; never emitted when the backend is unavailable. */
-        public signal void chapter_changed (int index);
-
-        /** Subtitle visibility signal; never emitted by an unavailable engine. */
-        public signal void subtitle_visibility_changed (bool visible);
-
-        /** Asynchronous command failure signal for an operational engine. */
-        public signal void operation_failed (string message);
-
-        /** No decoder is available to observe in this backend. */
-        public signal void video_decoder_changed (string decoder);
-
-        /** No audio stream or output metadata can be delivered without an engine. */
-        public signal void audio_metadata_changed ();
-
-        /** No available audio device inventory can be enumerated. */
-        public signal void audio_devices_changed ();
-
         /** Refuses source/output audio metadata access without a backend. */
         public Variant get_audio_information () throws Error {
             throw new MediaError.ENGINE_UNAVAILABLE (native_engine_unavailable_reason ());
@@ -64,9 +22,6 @@ namespace MediaKit {
         public void select_audio_device (string id) throws Error {
             throw new MediaError.ENGINE_UNAVAILABLE (native_engine_unavailable_reason ());
         }
-
-        /** Unavailable engines cannot observe source color information. */
-        public signal void color_metadata_changed ();
 
         /** Refuses color metadata access without an operational engine. */
         public Variant get_video_color () throws Error {

@@ -31,7 +31,8 @@ python3 tools/check_source_docs.py
 python3 tools/check_structure.py
 ```
 
-Run the GTK test with a working headless backend or an Xvfb/virtual compositor.
+The GTK tests use the environment's GDK backend. To run them on Debian without
+a display server, use `xvfb-run -a dbus-run-session -- meson test -C build --print-errorlogs`.
 Run the demo on Wayland/X11 with a real GL renderer to validate video, seek,
 close/reopen, source switching and GLArea unrealize/realize. Observe frame
 latency and memory during repeated playback cycles before raising performance

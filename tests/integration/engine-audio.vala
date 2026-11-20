@@ -1,10 +1,17 @@
+/** Command-line value supplied by Meson for this test process. */
+private static string filename;
+
+/** Command-line value supplied by Meson for this test process. */
+private static string codec;
+
 /** Validates an actual decoded multichannel source without demanding an HDMI receiver. */
 private void test_surround_metadata (string filename, string expected_codec) {
     var session = new MediaKit.MediaSession ();
     var loop = new MainLoop ();
     bool loaded = false;
     bool matching_track = false;
-    uint watchdog_id = Timeout.add_seconds (12, () => {
+    uint watchdog_id = 0;
+    watchdog_id = Timeout.add_seconds (12, () => {
         watchdog_id = 0;
         loop.quit ();
         return Source.REMOVE;
@@ -51,8 +58,8 @@ private void test_surround_metadata (string filename, string expected_codec) {
 int main (string[] args) {
     Test.init (ref args);
     assert (args.length == 3);
-    string filename = args[1];
-    string codec = args[2];
+    filename = args[1];
+    codec = args[2];
     Test.add_func ("/media/audio/source-metadata", () => {
         test_surround_metadata (filename, codec);
     });

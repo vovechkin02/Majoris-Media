@@ -10,23 +10,28 @@ gtk_sources = [
   'media-controls.vala',
   'gpu-next-controls.vala',
 ]
-gtk_extra_deps = []
+gtk_native_libraries = []
 if experimental_gtk_pq
   gtk_sources += [
     'hdr-media-view.vala',
+    '../../native/gtk/hdr-frame.vapi',
+  ]
+  gtk_native_libraries += static_library(
+    'media-hdr-frame',
     '../../native/gtk/hdr-frame.c',
     '../../native/gtk/hdr-frame-budget.c',
     '../../native/gtk/hdr-frame-format.c',
-    '../../native/gtk/hdr-frame.vapi',
-  ]
-  gtk_extra_deps += [epoxy]
+    dependencies: [gtk, epoxy, dependency('threads')],
+    pic: true,
+  )
 endif
 
 gtk_library = shared_library(
   'majoris-media-gtk4',
   files(gtk_sources),
   gtk_resources,
-  dependencies: [core_api, gtk] + gtk_extra_deps,
+  dependencies: [core_api, gtk],
+  link_whole: gtk_native_libraries,
   include_directories: include_directories('../../native/gtk'),
   vala_args: ['--shared-library=libmajoris-media-gtk4.so.0', '--hide-internal'],
   version: meson.project_version(),
