@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <requires lib="gtk" version="4.0"/>
+  <template class="MediaKitView" parent="GtkBox">
+    <property name="orientation">vertical</property>
+    <property name="hexpand">True</property>
+    <property name="vexpand">True</property>
+    <child>
+      <object class="GtkOverlay" id="surface">
+        <property name="hexpand">True</property>
+        <property name="vexpand">True</property>
+        <child>
+          <object class="GtkBox" id="render_host">
+            <property name="hexpand">True</property>
+            <property name="vexpand">True</property>
+          </object>
+        </child>
+        <child type="overlay">
+          <object class="GtkLabel" id="status_label">
+            <property name="label">No media loaded</property>
+            <property name="halign">center</property>
+            <property name="valign">center</property>
+            <property name="wrap">True</property>
+            <property name="margin-start">16</property>
+            <property name="margin-end">16</property>
+          </object>
+        </child>
+      </object>
+    </child>
+  </template>
+</interface>

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <requires lib="gtk" version="4.0"/>
+  <template class="MediaKitControls" parent="GtkBox">
+    <property name="orientation">horizontal</property>
+    <property name="spacing">8</property>
+    <property name="margin-top">8</property>
+    <property name="margin-bottom">8</property>
+    <child>
+      <object class="GtkButton" id="play_button">
+        <property name="icon-name">media-playback-start-symbolic</property>
+        <property name="sensitive">False</property>
+        <property name="tooltip-text">Playback engine unavailable</property>
+        <accessibility>
+          <property name="label">Play</property>
+        </accessibility>
+      </object>
+    </child>
+    <child>
+      <object class="GtkLabel" id="status_label">
+        <property name="label">Playback unavailable (Stage 1)</property>
+        <property name="xalign">0</property>
+        <property name="hexpand">True</property>
+      </object>
+    </child>
+  </template>
+</interface>

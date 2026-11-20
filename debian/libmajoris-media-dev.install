@@ -1,0 +1,6 @@
+usr/lib/*/libmajoris-media.so
+usr/include/majoris-media-1/majoris-media.h
+usr/share/vala/vapi/majoris-media-1.vapi
+usr/share/vala/vapi/majoris-media-1.deps
+usr/share/gir-1.0/MediaKit-1.0.gir
+usr/lib/*/pkgconfig/majoris-media-1.pc

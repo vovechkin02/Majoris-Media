@@ -1,0 +1,6 @@
+usr/lib/*/libmajoris-media-gtk4.so
+usr/include/majoris-media-gtk4-1/majoris-media-gtk4.h
+usr/share/vala/vapi/majoris-media-gtk4-1.vapi
+usr/share/vala/vapi/majoris-media-gtk4-1.deps
+usr/share/gir-1.0/MediaKitGtk-1.0.gir
+usr/lib/*/pkgconfig/majoris-media-gtk4-1.pc
