@@ -1,0 +1,88 @@
+# Stage 7 advanced rendering follow-up — verification record
+
+**Version:** 0.7.1
+**Date:** 2026-11-20
+**Status:** Implemented optional advanced *standalone* rendering path; embedded HDR/FEL is blocked by upstream renderer APIs.
+
+## Work completed
+
+- `GpuNextProbe` detects a Wayland environment and checks the installed mpv
+  executable version asynchronously (minimum 0.42); does not block GTK.
+- `GpuNextCapabilities` separates executable readiness, embedded gpu-next
+  unavailability, possible FEL processing, actual native HDR output and full
+  HDR10+ signaling. No version or source metadata is treated as hardware proof.
+- `GpuNextLaunchOptions` selects target/source/experimental per-scene luminance
+  hinting with an explicit argument terminator, no shell, and no configuration
+  scripts. Network access is opt-in; disc sources are refused rather than
+  constructing incomplete playlist/device parameters.
+- `GpuNextWindow` supervises an external Wayland mpv `--vo=gpu-next` process,
+  provides orderly termination, completion notifications and disposal cleanup.
+  It intentionally does not expose its separate window as a GTK child surface.
+- The GTK example demonstrates the opt-in launch, with separate process lifetime
+  and source/pause management. Existing `MediaSession` and `MediaView` APIs
+  remain unchanged.
+- Source, compiler options, Debian packaging metadata, architecture and
+  capability documentation updated. Added narrow version/argument unit checks.
+
+## Why complete embedded Stage 7 remains unavailable
+
+As of 2026-11-20, the supported Linux libmpv render API embeds `vo=libmpv`
+with its legacy OpenGL renderer, not full `vo=gpu-next`. Upstream PR #16818
+remains a draft. Attempting to call that private or evolving API from Majoris
+would create a non-portable interface with no guarantee of correct color
+management, frame synchronization or cleanup. GTK's GLArea framebuffer alone
+cannot negotiate a native Wayland HDR output color state.
+
+mpv 0.42 implements Dolby Vision Profile 7 enhancement-layer reconstruction
+inside its **standalone gpu-next renderer**. The optional separate-window path
+can use that upstream implementation if the installed FFmpeg/libplacebo/mpv
+build provides it. This code does not decode or reconstruct FEL itself.
+
+`--target-colorspace-hint-mode=source-dynamic` only derives scene-varying HDR10
+luminance hints from HDR10+/Dolby Vision metadata; it does **not** transmit
+native HDR10+/Dolby Vision dynamic metadata to the monitor. Native HDR output
+through Wayland remains display/compositor-dependent and unverified until
+measured on hardware.
+
+## Checks performed
+
+| Check | Result | Notes |
+| --- | --- | --- |
+| Static source, Meson inventories, XML, Core/GTK separation | PASS | `python3 tools/check_structure.py` |
+| Declaration documentation | PASS | `python3 tools/check_source_docs.py` |
+| Python checking-tool syntax | PASS | `python3 -m compileall -q tools` |
+| Deterministic policy/argument cases | REGISTERED | Unit source checks added; cannot execute without Vala |
+| Archive integrity / Debian executable bit | PASS | CRC and `debian/rules` mode checked |
+| Meson configure / Vala compilation | NOT RUN | `meson`, `valac`, GIO/GTK4/libmpv development packages absent |
+| Native mpv 0.42+ external video playback | NOT RUN | mpv executable/Wayland display absent |
+| Full Dolby Vision MEL/FEL picture reconstruction | NOT RUN | Requires licensed matching references, supported GPUs, and comparison |
+| Actual native HDR swapchain / compositor / monitor mode | NOT RUN | Requires Wayland/Mutter and hardware instrumentation |
+| Full HDR10+ metadata output | NOT IMPLEMENTED | Source-dynamic hints are not the HDR10+ metadata transport |
+| Embedded gpu-next | NOT IMPLEMENTED | No stable upstream Linux libmpv render API available |
+
+## Qualification on Majoris
+
+1. Build the Core and GTK libraries and their GIR/VAPI headers with Meson.
+2. Install mpv 0.42+ linked against FFmpeg and libplacebo versions providing
+   the Profile 7 enhancement-layer functionality, then run `mpv --version`.
+3. Start a Wayland GNOME session, run the demo, select a source and launch the
+   **separate** advanced window. Verify that `GpuNextWindow.finished` reports
+   a normal exit and that closing the host terminates the child.
+4. Test target, source and experimental scene-dynamic hint modes separately.
+   Compare screenshots, source PQ/HLG metadata, monitor HDR settings and
+   compositor negotiation against a calibrated reference. Do not infer native
+   HDR merely because the `gpu-next` window opens successfully.
+5. On legal profile-7 test material, compare the full reconstructed FEL image
+   against a reference (not just HDR10 fallback or Dolby Vision RPU presence).
+6. Confirm no shell command injection with paths beginning with dashes, network
+   URL opt-in, invalid disc requests, cancellation and repeated launch/stop.
+7. Qualify Dolby Vision and HDR10+ signaling separately from any dynamic
+   luminance hints generated by mpv.
+
+## Upstream references
+
+- mpv 0.42 release: https://github.com/mpv-player/mpv/discussions/18763
+- Render API: https://github.com/mpv-player/mpv/blob/master/include/mpv/render.h
+- Upstream draft gpu-next embedding: https://github.com/mpv-player/mpv/pull/16818
+- mpv colorspace hints: https://mpv.io/manual/stable/
+- GTK GLArea: https://docs.gtk.org/gtk4/class.GLArea.html

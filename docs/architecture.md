@@ -1,4 +1,4 @@
-# Architecture — Stage 7 (0.7.0)
+# Architecture — Stage 7.1 (0.7.1)
 
 ## Component and dependency structure
 
@@ -206,3 +206,19 @@ GTK wrapper simply observes them through GObject signals. The embedded
 `gpu-next` and native HDR routes remain intentionally unavailable until
 an upstream-supported API and Wayland compositor contract can be qualified.
 See [advanced rendering](advanced-rendering.md).
+
+## Optional standalone advanced video renderer (0.7.1)
+
+`GpuNextProbe` and `GpuNextLaunchOptions` are independent of GTK and libmpv's
+render API. `GpuNextWindow` owns a GLib `Subprocess` executing an external mpv
+0.42+ instance with an independently negotiated Wayland gpu-next swapchain.
+This composition is a distinct system integration, **not** an interchangeable
+backend implementation of the embedded `PlaybackBackend` contract: its
+separate window, playback state and process lifecycle are observable
+semantics that must not be hidden behind an invalid Strategy substitution.
+
+The launcher preflights asynchronously, constructs a fixed argv array with
+`--` before user-provided media paths, and never invokes a shell. Disposal
+terminates the child. Runtime engine readiness, native display HDR and DV
+enhancement-layer correctness are distinct, explicitly reported stages.
+The headless core remains GTK-independent, and the GTK example alone opts in.

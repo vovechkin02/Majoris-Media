@@ -99,3 +99,15 @@ missing discs, source replacement and eject/reinsert behavior.
   HDR10+, Dolby Vision FEL, and `gpu-next` are **not** implemented here.
 - See [advanced-rendering.md](advanced-rendering.md) and
   [verification-stage7.md](verification-stage7.md) before ISO inclusion.
+
+## Stage 7.1 optional gpu-next qualification
+
+Core unit cases `/media/core/stage7-gpu-next-candidate` and
+`/media/core/stage7-gpu-next-arguments` verify the version gate, Wayland
+candidate status, GPU-next fixed argv, source-path argument terminator, network
+opt-in, unsupported disc inputs, and empty process lifecycle. These tests do
+not need a real Wayland compositor or mpv process, but must be compiled with
+Vala to run. The example offers a manually invoked external gpu-next window;
+run its separate hardware qualification against native HDR, HDR10+
+scene-hints, and legal Dolby Vision 7 MEL/FEL references. See
+[verification-stage7-completion.md](verification-stage7-completion.md).

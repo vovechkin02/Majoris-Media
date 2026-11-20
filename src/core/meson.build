@@ -22,6 +22,10 @@ core_sources = files(
   'playback/mpv-backend.vala',
   'playback/playback-backend.vala',
   'playback/unavailable-backend.vala',
+  'rendering/gpu-next-capabilities.vala',
+  'rendering/gpu-next-launch-options.vala',
+  'rendering/gpu-next-probe.vala',
+  'rendering/gpu-next-window.vala',
   '../../native/playback/engine-adapter.c',
   '../../native/playback/engine.vapi',
 )

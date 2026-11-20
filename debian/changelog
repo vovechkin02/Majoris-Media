@@ -1,3 +1,14 @@
+majoris-media (0.7.1-1) unstable; urgency=medium
+
+  * Add optional standalone Wayland mpv gpu-next playback for advanced media.
+  * Preflight mpv 0.42+ asynchronously and maintain explicit renderer capabilities.
+  * Keep existing GTK OpenGL rendering unchanged and never claim native HDR
+    or Dolby Vision FEL without external display and reference media checks.
+  * Add fixed argument security, process lifecycle and focused regression checks.
+  * Update the demo and detailed Stage 7 rendering qualification guidance.
+
+ -- Majoris Maintainers <maintainers@invalid.example>  Fri, 20 Nov 2026 21:00:00 +1100
+
 majoris-media (0.7.0-1) unstable; urgency=medium
 
   * Add bounded SDR tone-mapping selection and video quality policy.

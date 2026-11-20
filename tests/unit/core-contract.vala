@@ -453,6 +453,88 @@ private void test_stage7_video_policies () {
     assert (session.color_output_target == MediaKit.ColorOutputTarget.SDR_BT709_BT1886);
 }
 
+/** A candidate gpu-next renderer must never imply a verified Wayland HDR display. */
+private void test_stage7_gpu_next_capabilities () {
+    var candidate = new MediaKit.GpuNextCapabilities.from_probe (
+        "/usr/bin/mpv", "mpv 0.42.0\n Copyright ...", true
+    );
+    assert (candidate.can_launch);
+    assert (candidate.native_hdr == MediaKit.CapabilityStatus.UNVERIFIED);
+    assert (candidate.dolby_vision_fel == MediaKit.CapabilityStatus.UNVERIFIED);
+    assert (candidate.embedded_gpu_next == MediaKit.CapabilityStatus.UNAVAILABLE);
+    assert (candidate.hdr10_plus_metadata_output == MediaKit.CapabilityStatus.UNAVAILABLE);
+
+    var legacy = new MediaKit.GpuNextCapabilities.from_probe (
+        "/usr/bin/mpv", "mpv 0.40.0", true
+    );
+    assert (!legacy.can_launch);
+    assert (legacy.native_hdr == MediaKit.CapabilityStatus.UNAVAILABLE);
+    var no_wayland = new MediaKit.GpuNextCapabilities.from_probe (
+        "/usr/bin/mpv", "mpv v0.42.0", false
+    );
+    assert (!no_wayland.can_launch);
+    var malformed = new MediaKit.GpuNextCapabilities.from_probe (
+        "/usr/bin/mpv", "not an mpv version", true
+    );
+    assert (!malformed.can_launch);
+    var empty = new MediaKit.GpuNextCapabilities ();
+    assert (!empty.can_launch);
+}
+
+/** Advanced video arguments must be fixed, non-shell, and never reinterpret source paths. */
+private void test_stage7_gpu_next_arguments () {
+    var options = new MediaKit.GpuNextLaunchOptions ();
+    try {
+        var source = new MediaKit.MediaSource.for_path ("/tmp/--suspicious.mkv");
+        var args = options.build_arguments ("/usr/bin/mpv", source);
+        assert (args[0] == "/usr/bin/mpv");
+        assert (args[2] == "--vo=gpu-next");
+        assert (args[args.length - 2] == "--");
+        assert (args[args.length - 1] == "/tmp/--suspicious.mkv");
+        options.color_hint_mode = MediaKit.GpuNextColorHintMode.SOURCE_DYNAMIC;
+        args = options.build_arguments ("/usr/bin/mpv", source);
+        assert (args[6] == "--target-colorspace-hint-mode=source-dynamic");
+    } catch (Error error) {
+        assert_not_reached ();
+    }
+
+    bool rejected = false;
+    try {
+        var network = new MediaKit.MediaSource.for_uri ("https://example.org/media.mp4");
+        options.build_arguments ("/usr/bin/mpv", network);
+    } catch (MediaKit.MediaError.INVALID_SOURCE error) {
+        rejected = true;
+    } catch (Error error) {
+        assert_not_reached ();
+    }
+    assert (rejected);
+    options.allow_network = true;
+    try {
+        var network = new MediaKit.MediaSource.for_uri ("https://example.org/media.mp4");
+        var args = options.build_arguments ("/usr/bin/mpv", network);
+        assert (args[args.length - 1] == "https://example.org/media.mp4");
+    } catch (Error error) {
+        assert_not_reached ();
+    }
+
+    rejected = false;
+    try {
+        var disc = new MediaKit.MediaSource.for_disc (
+            "/dev/sr0", MediaKit.DiscKind.BLURAY
+        );
+        options.build_arguments ("/usr/bin/mpv", disc);
+    } catch (MediaKit.MediaError.UNSUPPORTED error) {
+        rejected = true;
+    } catch (Error error) {
+        assert_not_reached ();
+    }
+    assert (rejected);
+
+    var playback = new MediaKit.GpuNextWindow ();
+    assert (!playback.running);
+    playback.close ();
+}
+
 /** Registers small, deterministic public Core API checks. */
 int main (string[] args) {
     Test.init (ref args);
@@ -471,5 +553,7 @@ int main (string[] args) {
     Test.add_func ("/media/core/stage6-disc-session", test_stage6_empty_disc_session);
     Test.add_func ("/media/core/stage7-rendering-metadata", test_stage7_renderer_metadata);
     Test.add_func ("/media/core/stage7-rendering-policy", test_stage7_video_policies);
+    Test.add_func ("/media/core/stage7-gpu-next-candidate", test_stage7_gpu_next_capabilities);
+    Test.add_func ("/media/core/stage7-gpu-next-arguments", test_stage7_gpu_next_arguments);
     return Test.run ();
 }

@@ -8,7 +8,7 @@ private class DemoApplication : Gtk.Application {
     /** Shows a neutral playback window with a file picker and transport controls. */
     protected override void activate () {
         var window = new Gtk.ApplicationWindow (this);
-        window.title = "Majoris Media — Stage 4";
+        window.title = "Majoris Media — Advanced video demo";
         window.set_default_size (960, 600);
 
         var session = new MediaKit.MediaSession ();
@@ -16,6 +16,33 @@ private class DemoApplication : Gtk.Application {
         var controls = new MediaKitGtk.MediaControls ();
         view.session = session;
         controls.session = session;
+
+        var advanced_window = new MediaKit.GpuNextWindow ();
+        var advanced_button = new Gtk.Button.with_label (
+            "Advanced video (separate Wayland window)"
+        );
+        advanced_button.tooltip_text =
+            "Requires mpv 0.42+ and Wayland; native HDR must be verified externally";
+        advanced_button.clicked.connect (() => {
+            var source = session.source;
+            if (source == null || advanced_window.running) {
+                return;
+            }
+            advanced_window.open_async.begin (source, null, null, (object, result) => {
+                try {
+                    advanced_window.open_async.end (result);
+                    if (session.state == MediaKit.PlaybackState.PLAYING) {
+                        session.pause ();
+                    }
+                } catch (Error error) {
+                    warning ("Advanced video unavailable: %s", error.message);
+                }
+            });
+        });
+        window.destroy.connect (() => {
+            advanced_window.close ();
+            session.close ();
+        });
 
         var open_button = new Gtk.Button.with_label ("Open Media");
         open_button.clicked.connect (() => {
@@ -43,6 +70,7 @@ private class DemoApplication : Gtk.Application {
 
         var layout = new Gtk.Box (Gtk.Orientation.VERTICAL, 0);
         layout.append (open_button);
+        layout.append (advanced_button);
         layout.append (view);
         layout.append (controls);
         window.set_child (layout);

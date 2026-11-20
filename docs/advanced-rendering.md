@@ -90,3 +90,34 @@ FEL needs real enhancement-layer reconstruction tests, not just codec probing.
 
 **Release gate:** Stage 7 is a source implementation for the SDR renderer
 policy and diagnostic seam. It is not complete native HDR/FEL implementation.
+
+## Stage 7.1 advanced external renderer — implemented in 0.7.1
+
+Majoris now exposes `GpuNextProbe`, `GpuNextCapabilities`,
+`GpuNextLaunchOptions` and `GpuNextWindow` from the GTK-independent Core.
+This path uses the installed **mpv 0.42+** executable with `--vo=gpu-next`
+on its **own Wayland window** and allows the engine to negotiate a native
+swapchain rather than sending its HDR pixels into an unqualified GTK GLArea.
+
+The optional engine is supervised as a distinct process, never installed as a
+surreptitious substitute for `MediaView`. Source playback, seek, tracks, audio
+and lifetime are **independent** of the embedded MediaSession. Hosts must close
+an owned external player on teardown and must not expect GTK transport state
+to control it. The demo pauses its local session after the external process is
+launched to avoid two competing audio tracks.
+
+The launcher constrains color hint selection to `target`, `source`, or
+`source-dynamic` and uses `--target-colorspace-hint=auto`. The latter mode is an
+experimental **HDR10 scene-luminance approximation** from dynamic metadata,
+not HDMI HDR10+ metadata transport. There is no verified HDR presentation
+claim without output-signal and visual qualification.
+
+### Remaining integration gate
+
+A production embeddable gpu-next renderer still requires an upstream-supported
+libmpv API, a GTK/GDK native HDR surface color-state contract, a supported
+Wayland color-management implementation, and measured end-to-end HDR output.
+Do not backport the unmerged PR into the default library or use a private
+numeric render parameter without an upstream ABI/ownership contract.
+
+See [Stage 7 completion verification](verification-stage7-completion.md).

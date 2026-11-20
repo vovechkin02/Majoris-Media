@@ -1,9 +1,9 @@
-# Public API and operation contracts — Stage 7 (0.7.0)
+# Public API and operation contracts — Stage 7.1 (0.7.1)
 
 ## Stability and types
 
 Public namespaces remain `MediaKit-1.0` and `MediaKitGtk-1.0`; SONAME 0 is
-pre-release. Version 0.7.0 is not an ABI-stable production release.
+pre-release. Version 0.7.1 is not an ABI-stable production release.
 
 | Type | Role | Behavior in Stage 5 |
 | --- | --- | --- |
@@ -182,3 +182,26 @@ See `docs/disc-playback.md` for source selection and compatibility constraints.
   infer monitor HDR, compositor output, `gpu-next` or Dolby Vision FEL.
 - `MediaCapabilities.embedded_gpu_next` is `UNAVAILABLE` for this release;
   native HDR and Dolby Vision FEL remain unverified.
+
+## Optional gpu-next windowed renderer (0.7.1)
+
+- `GpuNextProbe.probe_async(Cancellable?)` asynchronously checks for mpv 0.42+
+  in a Wayland session. An executable passing this check **can only attempt**
+  advanced rendering, not prove native monitor HDR or FEL output.
+- `GpuNextCapabilities` exposes `can_launch`, `version`, `executable`,
+  `wayland_session`, `native_hdr`, `embedded_gpu_next`,
+  `dolby_vision_fel`, `hdr10_plus_metadata_output`. Unverified states must
+  not be promoted to AVAILABLE based on file metadata or version.
+- `GpuNextLaunchOptions` provides `color_hint_mode` and `allow_network`, plus
+  `build_arguments()` for a validated, non-shell launch. Only files and
+  optionally HTTP(S) URLs are supported; Blu-ray and DVD require separate
+  device handling and are rejected.
+- `GpuNextWindow.open_async(source, options?, cancellable?)` creates a
+  **separate Wayland window** using the system mpv executable. It owns the child
+  process and signals `finished(successful, exit_status)` on exit. `stop()`
+  requests termination; `close()` forcibly releases an active child.
+  Launch success is not equivalent to working playback or native HDR.
+
+The existing `MediaSession`, `OpenGlOutput` and `MediaView` contracts remain
+unchanged. The optional external renderer has independent transport state and
+must not be mistaken for an embedded GTK widget or a validated AV pipeline.

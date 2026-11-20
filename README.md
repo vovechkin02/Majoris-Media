@@ -1,6 +1,6 @@
 # Majoris Media
 
-**Version:** 0.7.0 (Stage 7 advanced SDR rendering policies and telemetry) · **API namespaces:** `MediaKit-1.0`,
+**Version:** 0.7.1 (Stage 7 advanced-renderer fallback and policy verification) · **API namespaces:** `MediaKit-1.0`,
 `MediaKitGtk-1.0` · **Platform:** Majoris OS / Debian 13 · **License:** GPL-3.0-or-later
 
 Majoris Media is a reusable audio/video playback foundation for Majoris applications.
@@ -10,7 +10,7 @@ libmpv, and a **GtkGLArea**-attached OpenGL renderer. Applications retain owners
 windows, playlists, toolbars, persistent settings, and fullscreen policy.
 
 > **Verification status:** This is source implementation, not a validated release.
-> Stage 7 static checks passed, but Vala, Meson, libmpv and GTK4 development
+> Stage 7.1 static checks passed, but Vala, Meson, libmpv and GTK4 development
 > packages were unavailable in the authoring environment. Native compilation,
 > runtime playback, GTK rendering, ICC processing and hardware output are
 > **not verified**.
@@ -52,6 +52,9 @@ windows, playlists, toolbars, persistent settings, and fullscreen policy.
 | Renderer quality | Opt-in bounded debanding, default balanced |
 | Framebuffer telemetry | GL RGB bit depth and render dithering depth measured on active framebuffer; no HDR output inference |
 | Embedded gpu-next | Unavailable in this adapter pending an official supported API |
+| Standalone gpu-next Wayland | Optional second-window mpv 0.42+ process, async preflight and cleanup; not embedded into GTK |
+| Advanced display negotiation | `--target-colorspace-hint=auto`, target/source/experimental source-dynamic hint modes; actual monitor output must be tested |
+| GPU-next FEL reconstruction | Upstream renderer can attempt it; not proven by executable version or this library |
 | Display ICC | Optional caller-provided ICC blob through `mpv_render_context_set_parameter`; profile selection belongs to host |
 | Native HDR policy | `PREFER_NATIVE` rejected until actual GTK/compositor HDR output exists; no false positive |
 | Media probe | Standalone probe API reserved; still reports unavailable |
@@ -70,6 +73,35 @@ packages; missing dependencies stop configuration rather than silently generatin
 non-playing release. An intentionally non-playing build can use `-Dmpv=disabled`
 for API development and headless testing.
 
+## Stage 7 advanced video — optional separate window
+
+The **stable embedded GTK4 view remains SDR**. For advanced video, a separate
+`MediaKit.GpuNextWindow` can launch a system `mpv` **0.42+** process using
+`--vo=gpu-next`, native Wayland GPU contexts and color-management hints.
+It has its own top-level Wayland surface and is **not embedded** in `MediaView`.
+The example application provides an explicit button for this path. The host
+owns the window lifetime and must close it on shutdown.
+
+```vala
+var source = new MediaKit.MediaSource.for_path ("/path/to/movie.mkv");
+var advanced_window = new MediaKit.GpuNextWindow ();
+try {
+    yield advanced_window.open_async (source);
+} catch (Error error) {
+    warning ("Advanced video cannot start: %s", error.message);
+}
+// Call advanced_window.close () during host disposal.
+```
+
+`GpuNextProbe.probe_async()` checks the installed executable and local Wayland
+session without blocking GTK; it does **not** establish whether the GPU,
+compositor, display, dynamic HDR signal or Dolby Vision reconstruction actually
+works. `GpuNextLaunchOptions` uses fixed argv arguments and rejects unsupported
+disc sources; network playback requires explicit `allow_network=true`.
+`SOURCE_DYNAMIC` enables experimental scene-by-scene HDR10 peak hints, **not**
+full HDMI HDR10+ dynamic metadata. See
+[advanced rendering](docs/advanced-rendering.md).
+
 ## Stage 7 rendering
 
 `PlaybackOptions.tone_mapping` controls one of four validated SDR algorithms:
@@ -80,12 +112,14 @@ GTK framebuffer RGB bit depths, the libmpv render-depth parameter, whether a
 caller-supplied ICC profile was accepted, and a submitted-frame indication.
 The telemetry is sampled only when needed, not on every decoded frame.
 
-**This is not native HDR:** libmpv's embedded OpenGL path remains an SDR
-pipeline. A 10-bit framebuffer does not establish HDR scanout. `gpu-next`,
-Dolby Vision Profile 7 MEL/FEL, compositor HDR10+ signaling, and real native
-HDR must be implemented and validated separately. See
+**The embedded view is not native HDR:** libmpv's embedded OpenGL path remains an SDR
+pipeline. A 10-bit framebuffer does not establish HDR scanout. `gpu-next` in the **separate mpv window** may handle Dolby Vision Profile 7
+MEL/FEL and Wayland HDR hints when its runtime dependencies allow it. Complete
+embedded `gpu-next`, HDR10+ metadata passthrough and verified monitor HDR
+remain unimplemented. See
 [advanced rendering](docs/advanced-rendering.md) and
-[Stage 7 verification](docs/verification-stage7.md).
+[Stage 7 verification](docs/verification-stage7.md) and
+[Stage 7.1 verification](docs/verification-stage7-completion.md).
 
 ## Codec and output policy
 
@@ -134,6 +168,12 @@ meson setup build-nompv -Dmpv=disabled -Dgtk=false -Dexamples=false
 meson compile -C build-nompv
 meson test -C build-nompv --print-errorlogs
 ```
+
+For the advanced separate-window option, install a recent `mpv` binary (0.42+
+with `gpu-next` support), with compatible FFmpeg/libplacebo and native Wayland
+color-management capability. Debian 13's stock mpv may be too old; this optional
+path never silently falls back to older mpv. `GpuNextWindow` does not affect the
+regular library dependency requirements.
 
 The build provides `libmajoris-media.so.0`, optional
 `libmajoris-media-gtk4.so.0`, VAPIs, C headers, GIR/typelibs when the compiler
@@ -286,7 +326,7 @@ The native smoke test opens a short PCM WAV; a separate representative generated
 MKV exercises live track/chapter discovery and track/visibility controls.
 Source validation, cancellation and GTK session binding are covered separately.
 See [testing](docs/TESTING.md) and the precise
-[Stage 7 verification report](docs/verification-stage7.md). No benchmarks are
+[Stage 7.1 verification report](docs/verification-stage7-completion.md). No benchmarks are
 claimed; hardware decoding, 4K, HDR and receiver passthrough need target
 hardware qualification.
 
