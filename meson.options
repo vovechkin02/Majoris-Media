@@ -1,4 +1,5 @@
+option('mpv', type: 'feature', value: 'enabled', description: 'Compile the libmpv playback engine (disable for a non-playing API build)')
 option('gtk', type: 'boolean', value: true, description: 'Build the optional GTK4 widget library')
-option('examples', type: 'boolean', value: true, description: 'Build a minimal GTK consumer')
-option('tests', type: 'boolean', value: true, description: 'Build focused Stage 1 tests')
+option('examples', type: 'boolean', value: true, description: 'Build an interactive GTK playback example')
+option('tests', type: 'boolean', value: true, description: 'Build focused playback contracts and integration checks')
 option('introspection', type: 'feature', value: 'auto', description: 'Generate GIR typelibs if tooling is available')

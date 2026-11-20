@@ -1,34 +1,52 @@
 namespace MediaKit {
-    /** Contract isolating playback operations from the public MediaSession API. */
+    /** Interchangeable playback Strategy isolating engine specifics from MediaSession. */
     internal interface PlaybackBackend : Object {
-        /** Indicates that this backend has been verified operational. */
+        /** Whether backend engine support is compiled in. */
         public abstract bool is_available { get; }
 
-        /** Opens a source asynchronously, reporting errors without fake success. */
+        /** Natural end-of-stream event, excluding an explicit stop request. */
+        public signal void ended ();
+
+        /** A runtime backend failure delivered on the owning main context. */
+        public signal void failed (string message);
+
+        /** Actual pause-state notification from the engine. */
+        public signal void pause_changed (bool paused);
+
+        /** Position event in microseconds, never seconds. */
+        public signal void position_changed (int64 position_us);
+
+        /** Duration event in microseconds, or zero for unknown. */
+        public signal void duration_changed (int64 duration_us);
+
+        /** Resolves only on successful loaded-stream confirmation. */
         public abstract async void open_async (MediaSource source,
                                                Cancellable? cancellable = null) throws Error;
 
-        /** Starts playback only when this backend has a ready stream. */
+        /** Resumes the selected source. */
         public abstract void play () throws Error;
 
-        /** Pauses an operational stream without invalidating its metadata. */
+        /** Pauses the selected source. */
         public abstract void pause () throws Error;
 
-        /** Stops an operational stream while retaining the selected source. */
+        /** Stops decoding but retains the selected source. */
         public abstract void stop () throws Error;
 
-        /** Seeks to a zero-based position in microseconds when supported. */
+        /** Seeks to a nonnegative microsecond position. */
         public abstract void seek (int64 position_us) throws Error;
 
-        /** Releases backend resources and clears any pending source. */
+        /** Creates one context-bound GL rendering endpoint when supported. */
+        public abstract OpenGlOutput create_opengl_output () throws Error;
+
+        /** Invalidates the backend and any pending source load. */
         public abstract void close ();
     }
 
-    /** Private native bridge reports availability without exposing C implementation types. */
+    /** Native capability detection for builds with or without libmpv. */
     [CCode (cname = "mediakit_engine_is_available", cheader_filename = "engine-adapter.h")]
     internal extern static bool native_engine_is_available ();
 
-    /** Private native bridge provides the reason for an unavailable engine. */
+    /** Native diagnostic for builds without a libmpv playback engine. */
     [CCode (cname = "mediakit_engine_unavailable_reason", cheader_filename = "engine-adapter.h")]
     internal extern static unowned string native_engine_unavailable_reason ();
 }

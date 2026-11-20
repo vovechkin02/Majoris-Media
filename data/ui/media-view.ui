@@ -10,9 +10,11 @@
         <property name="hexpand">True</property>
         <property name="vexpand">True</property>
         <child>
-          <object class="GtkBox" id="render_host">
+          <object class="GtkGLArea" id="render_area">
             <property name="hexpand">True</property>
             <property name="vexpand">True</property>
+            <property name="auto-render">False</property>
+            <property name="has-depth-buffer">False</property>
           </object>
         </child>
         <child type="overlay">

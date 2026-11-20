@@ -1,28 +1,131 @@
 #ifndef MEDIA_ENGINE_ADAPTER_H
 #define MEDIA_ENGINE_ADAPTER_H
 
-#include <glib.h>
+#include <gio/gio.h>
 
 G_BEGIN_DECLS
 
-/**
- * mediakit_engine_is_available:
+#define MEDIAKIT_TYPE_ENGINE (mediakit_engine_get_type())
+G_DECLARE_FINAL_TYPE(MediaKitEngine, mediakit_engine, MEDIAKIT, ENGINE, GObject)
+
+#define MEDIAKIT_TYPE_RENDERER (mediakit_renderer_get_type())
+G_DECLARE_FINAL_TYPE(MediaKitRenderer, mediakit_renderer, MEDIAKIT, RENDERER, GObject)
+
+/** mediakit_engine_is_available:
  *
- * Reports whether Stage 1 has an operational playback backend. This
- * deliberately returns FALSE until a real backend has been integrated.
- *
- * Returns: FALSE for this non-playing architecture baseline.
+ * Returns: TRUE when the optional libmpv integration was compiled in.
  */
 gboolean mediakit_engine_is_available(void);
 
-/**
- * mediakit_engine_unavailable_reason:
+/** mediakit_engine_unavailable_reason:
  *
- * Returns the diagnostic shared by the unavailable backend adapter.
- *
- * Returns: (transfer none): Static string valid for the process lifetime.
+ * Returns: (transfer none): Stable diagnostic for builds without libmpv.
  */
 const gchar *mediakit_engine_unavailable_reason(void);
+
+/** mediakit_engine_new:
+ *
+ * Returns: (transfer full): Independent native playback engine.
+ */
+MediaKitEngine *mediakit_engine_new(void);
+
+/** mediakit_engine_load_async:
+ * @self: Engine for one playback session.
+ * @uri: Validated file, HTTP, or HTTPS URI.
+ * @cancellable: (nullable): Operation cancellation.
+ * @callback: (scope async): Completion notification.
+ * @user_data: (closure callback): Completion context.
+ *
+ * Completes on FILE_LOADED, command failure, or cancellation, not on queueing.
+ */
+void mediakit_engine_load_async(MediaKitEngine *self,
+                                const gchar *uri,
+                                GCancellable *cancellable,
+                                GAsyncReadyCallback callback,
+                                gpointer user_data);
+
+/** mediakit_engine_load_finish:
+ * @self: Engine that initiated the load.
+ * @result: The matching asynchronous result.
+ * @error: (out) (optional): Error on failure.
+ *
+ * Returns: TRUE after an actual file-loaded event.
+ */
+gboolean mediakit_engine_load_finish(MediaKitEngine *self,
+                                     GAsyncResult *result,
+                                     GError **error);
+
+/** mediakit_engine_play:
+ * @self: Playback engine.
+ * @error: (out) (optional): Error on failure.
+ *
+ * Returns: TRUE when unpause was accepted.
+ */
+gboolean mediakit_engine_play(MediaKitEngine *self, GError **error);
+
+/** mediakit_engine_pause:
+ * @self: Playback engine.
+ * @error: (out) (optional): Error on failure.
+ *
+ * Returns: TRUE when pause was accepted.
+ */
+gboolean mediakit_engine_pause(MediaKitEngine *self, GError **error);
+
+/** mediakit_engine_stop:
+ * @self: Playback engine.
+ * @error: (out) (optional): Error on failure.
+ *
+ * Returns: TRUE when stop was accepted.
+ */
+gboolean mediakit_engine_stop(MediaKitEngine *self, GError **error);
+
+/** mediakit_engine_seek:
+ * @self: Playback engine.
+ * @position_us: Nonnegative requested position in microseconds.
+ * @error: (out) (optional): Error on failure.
+ *
+ * Returns: TRUE when a seek command was accepted.
+ */
+gboolean mediakit_engine_seek(MediaKitEngine *self,
+                               gint64 position_us,
+                               GError **error);
+
+/** mediakit_engine_close:
+ * @self: Engine whose pending operations must be canceled.
+ *
+ * Releases the active source; the object itself is reference counted.
+ */
+void mediakit_engine_close(MediaKitEngine *self);
+
+/** mediakit_engine_create_renderer:
+ * @self: Operational engine.
+ * @error: (out) (optional): Error if creation fails.
+ *
+ * Requires a current OpenGL context. Only one renderer may be active per engine.
+ * Returns: (transfer full) (nullable): Renderer to be disposed on its GL thread.
+ */
+MediaKitRenderer *mediakit_engine_create_renderer(MediaKitEngine *self, GError **error);
+
+/** mediakit_renderer_render:
+ * @self: Renderer attached to the current OpenGL context.
+ * @width_px: Positive target framebuffer width.
+ * @height_px: Positive target framebuffer height.
+ * @error: (out) (optional): Error on failure.
+ *
+ * Draws into the currently bound GL framebuffer on the owning GL thread.
+ * Returns: TRUE if a frame was successfully submitted.
+ */
+gboolean mediakit_renderer_render(MediaKitRenderer *self,
+                                  gint width_px,
+                                  gint height_px,
+                                  GError **error);
+
+/** mediakit_renderer_release:
+ * @self: Renderer being detached on its owning OpenGL context.
+ *
+ * Idempotently releases native GPU resources; call before GLArea unrealize.
+ */
+void mediakit_renderer_release(MediaKitRenderer *self);
 
 G_END_DECLS
 

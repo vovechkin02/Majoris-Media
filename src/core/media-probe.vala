@@ -7,7 +7,7 @@ namespace MediaKit {
             Object ();
         }
 
-        /** Reports a missing metadata engine, without inventing stream information. */
+        /** Reports the unimplemented probe subsystem without inventing media metadata. */
         public async MediaDescription inspect_async (MediaSource source,
                                                      Cancellable? cancellable = null)
                                                      throws Error {
@@ -15,7 +15,9 @@ namespace MediaKit {
             Idle.add (inspect_async.callback);
             yield;
             cancellable?.set_error_if_cancelled ();
-            throw new MediaError.ENGINE_UNAVAILABLE (native_engine_unavailable_reason ());
+            throw new MediaError.ENGINE_UNAVAILABLE (
+                "Metadata probing is not implemented in Stage 2"
+            );
         }
     }
 }

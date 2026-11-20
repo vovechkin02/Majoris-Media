@@ -1,24 +1,23 @@
-# Testing and release qualification
+# Testing and release qualification — Stage 2
 
-## Scope
+## Focused tests
 
-Only Stage 1 contracts are tested. No media benchmarks, frame-accuracy tests,
-hardware outputs, codec fixtures or long-running decoder stress tests are
-meaningful until Stage 2 exists. Avoid creating them prematurely.
-
-| Test executable | Suite | Coverage |
+| Test | Suite | Purpose |
 | --- | --- | --- |
-| `test-core-contract` | unit | File and URI source identity; rejected URI scheme; unavailable engine and conservative capabilities; async open error/close; cancellation |
-| `test-gtk-contract` | integration | GTK template creation and shared session assignment/replacement |
+| `media-source-documentation` | unit | Verify Valadoc/gtk-doc summaries on handwritten definitions |
+| `media-source-structure` | unit | Meson source inventories, XML templates, layering, UTF-8 and whitespace |
+| `media-core-contract` | unit | Valid/rejected URIs, initial states, missing file, pre-canceled load |
+| `media-engine-playback` | integration | Tiny generated WAV, actual `FILE_LOADED`, play, pause, seek, stop, restart |
+| `media-gtk-contract` | integration | GTK templates and independent session assignment |
+
+The native audio fixture is `tests/fixtures/short-tone.wav`: 500 ms of 16 kHz
+mono 16-bit PCM. It is intentionally small, original and deterministic.
+No HDR, Atmos or large decoder benchmark tests are justified at this stage.
 
 ## Commands
 
 ```sh
-meson setup build-core -Dgtk=false -Dexamples=false -Dtests=true
-meson compile -C build-core
-meson test -C build-core --print-errorlogs
-
-meson setup build -Dgtk=true -Dexamples=true -Dtests=true
+meson setup build -Dmpv=enabled -Dgtk=true -Dtests=true -Dexamples=true
 meson compile -C build
 meson test -C build --print-errorlogs
 
@@ -26,27 +25,24 @@ python3 tools/check_source_docs.py
 python3 tools/check_structure.py
 ```
 
-The GTK integration test requires a usable GDK backend and runs with
-`GDK_BACKEND=headless`. If that backend is absent in the target GTK version,
-use an explicit compositor/virtual display qualification and record the
-result rather than silently treating the GTK test as passed.
+Run the GTK test with a working headless backend or an Xvfb/virtual compositor.
+Run the demo on Wayland/X11 with a real GL renderer to validate video, seek,
+close/reopen, source switching and GLArea unrealize/realize. Observe frame
+latency and memory during repeated playback cycles before raising performance
+claims. Test the headless core build separately with `-Dgtk=false`.
 
-Use `-Dintrospection=enabled` for mandatory typelib builds. On a target with
-the necessary development packages, also verify generated `.h`, `.vapi`,
-`.gir`, `.typelib`, `.pc`, `.deps` files and that a standalone consumer can
-link only Core with no GTK dependencies.
+## Release gates
 
-## What must be reported
+1. `meson setup`, compilation, link, VAPI/GIR generation and typelib compile.
+2. Core unit and engine smoke tests with a real libmpv installation.
+3. GTK widget integration on a functional GDK backend.
+4. Repeated open/cancel/reopen, close/dispose, audio-only and video source tests.
+5. Real device checks: Intel/AMD/NVIDIA GL, Wayland/X11, sample MP4/MKV, no audio
+   sink, decoder fallback, window resize and GL context replacement.
+6. Debian binary package installation, library loading and actual standalone
+   consumer compilation.
 
-Build, native tests, GTK tests, introspection and Debian package checks each
-receive separate **passed**, **failed** or **not run** status. A source-only
-static check cannot substitute for Vala/Meson compilation. Any unavailable
-backend, renderer, test fixture, display or toolchain must be disclosed.
-
-## Next qualification milestones
-
-When Stage 2 creates an actual playback engine, add small representative
-fixtures for load/play/stop, seeking, tracks and subtitles, cancellation and
-hardware-decoding fallback. Only after HDR and encoded audio outputs work
-should tests/benchmarks for native HDR/Atmos/DTS:X be added, with actual
-monitor/receiver confirmation rather than container metadata alone.
+The source authoring environment had no valac, meson, GLib/GTK4 or libmpv
+headers and no package download access. Therefore Stage 2 native compilation,
+GIR generation and runtime tests are **NOT RUN**, not passed. See
+[verification-stage2.md](verification-stage2.md).

@@ -50,7 +50,7 @@ pkg.generate(
   gtk_library,
   filebase: 'majoris-media-gtk4-1',
   name: 'Majoris Media GTK4',
-  description: 'Reusable GTK4 media view and controls (architecture baseline)',
+  description: 'Reusable GTK4 media view and controls (OpenGL video output and interactive transport)',
   subdirs: 'majoris-media-gtk4-1',
   requires: ['majoris-media-1', 'gtk4'],
 )

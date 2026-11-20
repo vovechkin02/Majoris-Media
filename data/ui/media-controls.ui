@@ -10,17 +10,44 @@
       <object class="GtkButton" id="play_button">
         <property name="icon-name">media-playback-start-symbolic</property>
         <property name="sensitive">False</property>
-        <property name="tooltip-text">Playback engine unavailable</property>
+        <property name="tooltip-text">Play</property>
         <accessibility>
-          <property name="label">Play</property>
+          <property name="label">Play or pause</property>
+        </accessibility>
+      </object>
+    </child>
+    <child>
+      <object class="GtkButton" id="stop_button">
+        <property name="icon-name">media-playback-stop-symbolic</property>
+        <property name="sensitive">False</property>
+        <property name="tooltip-text">Stop</property>
+        <accessibility>
+          <property name="label">Stop playback</property>
+        </accessibility>
+      </object>
+    </child>
+    <child>
+      <object class="GtkScale" id="seek_scale">
+        <property name="orientation">horizontal</property>
+        <property name="hexpand">True</property>
+        <property name="draw-value">False</property>
+        <property name="sensitive">False</property>
+        <property name="adjustment">
+          <object class="GtkAdjustment">
+            <property name="lower">0</property>
+            <property name="upper">1</property>
+            <property name="step-increment">1</property>
+          </object>
+        </property>
+        <accessibility>
+          <property name="label">Playback position</property>
         </accessibility>
       </object>
     </child>
     <child>
       <object class="GtkLabel" id="status_label">
-        <property name="label">Playback unavailable (Stage 1)</property>
-        <property name="xalign">0</property>
-        <property name="hexpand">True</property>
+        <property name="label">00:00 / 00:00</property>
+        <property name="xalign">1</property>
       </object>
     </child>
   </template>

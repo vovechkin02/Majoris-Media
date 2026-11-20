@@ -9,6 +9,8 @@ Build-Depends:
  valac,
  libglib2.0-dev (>= 2.76),
  libgtk-4-dev (>= 4.16),
+ libmpv-dev,
+ libepoxy-dev,
  gobject-introspection,
 Standards-Version: 4.7.0
 Rules-Requires-Root: no
@@ -18,8 +20,9 @@ Package: libmajoris-media0
 Architecture: any
 Multi-Arch: same
 Depends: ${shlibs:Depends}, ${misc:Depends}
-Description: Majoris Media headless session API (architecture baseline)
- Pre-release GObject media API with no operational playback engine yet.
+Description: Majoris Media headless playback session library
+ GObject playback sessions with an asynchronous libmpv backend and a
+ reusable OpenGL output API, independent of GTK4.
 
 Package: libmajoris-media-dev
 Section: libdevel
@@ -27,14 +30,14 @@ Architecture: any
 Multi-Arch: same
 Depends: libmajoris-media0 (= ${binary:Version}), ${misc:Depends}, libglib2.0-dev
 Description: Headers, VAPI, GIR and pkg-config for Majoris Media Core
- Pre-release media session API development files.
+ Development interface for the headless media playback library.
 
 Package: libmajoris-media-gtk4-0
 Architecture: any
 Multi-Arch: same
 Depends: ${shlibs:Depends}, ${misc:Depends}, libmajoris-media0 (= ${binary:Version})
-Description: Reusable Majoris Media GTK4 widgets (architecture baseline)
- GTK4 view and disabled transport controls for future media playback.
+Description: Reusable Majoris Media GTK4 playback widgets
+ GTK4 OpenGL media view and accessible transport controls.
 
 Package: libmajoris-media-gtk4-dev
 Section: libdevel
@@ -42,4 +45,4 @@ Architecture: any
 Multi-Arch: same
 Depends: libmajoris-media-gtk4-0 (= ${binary:Version}), libmajoris-media-dev (= ${binary:Version}), libgtk-4-dev, ${misc:Depends}
 Description: Headers, VAPI, GIR and pkg-config for Majoris Media GTK4
- Pre-release GTK4 media viewer development files.
+ Development interface for the reusable GTK4 media widgets.

@@ -1,24 +1,36 @@
 core_sources = files(
-  'media-error.vala',
-  'playback-state.vala',
-  'media-source.vala',
-  'media-track.vala',
-  'media-chapter.vala',
-  'video-information.vala',
   'audio-information.vala',
   'media-capabilities.vala',
+  'media-chapter.vala',
   'media-description.vala',
+  'media-error.vala',
+  'media-probe.vala',
+  'media-session.vala',
+  'media-source.vala',
+  'media-track.vala',
+  'open-gl-output.vala',
   'playback-options.vala',
+  'playback-state.vala',
+  'video-information.vala',
+  'playback/mpv-backend.vala',
   'playback/playback-backend.vala',
   'playback/unavailable-backend.vala',
-  'media-session.vala',
-  'media-probe.vala',
   '../../native/playback/engine-adapter.c',
+  '../../native/playback/engine.vapi',
 )
+
+core_dependencies = [gio]
+core_c_args = []
+if mpv.found()
+  core_dependencies += [mpv, epoxy]
+  core_c_args += ['-DMEDIAKIT_HAVE_MPV']
+endif
+
 core_library = shared_library(
   'majoris-media',
   core_sources,
-  dependencies: [gio],
+  dependencies: core_dependencies,
+  c_args: core_c_args,
   include_directories: include_directories('../../native/playback'),
   vala_args: ['--shared-library=libmajoris-media.so.0', '--hide-internal'],
   version: meson.project_version(),
@@ -60,7 +72,7 @@ pkg.generate(
   core_library,
   filebase: 'majoris-media-1',
   name: 'Majoris Media Core',
-  description: 'Reusable headless media API and playback-session contract',
+  description: 'Reusable headless media API with asynchronous libmpv playback',
   subdirs: 'majoris-media-1',
   requires: ['gio-2.0'],
 )

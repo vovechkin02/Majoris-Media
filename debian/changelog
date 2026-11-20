@@ -1,6 +1,7 @@
-majoris-media (0.1.0) unstable; urgency=medium
+majoris-media (0.2.0-1) unstable; urgency=medium
 
-  * Establish separate headless and GTK4 libraries with a documented API.
-  * Add non-playing engine adapter, templates, tests and packaging scaffolding.
+  * Implement libmpv session engine with asynchronous open and playback control.
+  * Add GTK4 OpenGL video output and neutral interactive media controls.
+  * Preserve headless Core and explicit optional no-engine configuration.
 
- -- Majoris Maintainers <maintainers@invalid.example>  Fri, 20 Nov 2026 00:00:00 +0000
+ -- Majoris Maintainers <maintainers@invalid.example>  Fri, 20 Nov 2026 16:03:00 +1100

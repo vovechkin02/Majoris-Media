@@ -1,14 +1,29 @@
 namespace MediaKit {
-    /** Explicit, non-playing backend used until the native decoder bridge is implemented. */
+    /** Explicit unsupported backend for intentionally libmpv-disabled builds. */
     internal sealed class UnavailableBackend : Object, PlaybackBackend {
-        /** No operational playback engine is part of the Stage 1 delivery. */
+        /** Reports no usable playback engine in this build. */
         public bool is_available {
             get {
-                return native_engine_is_available ();
+                return false;
             }
         }
 
-        /** Yields once, then reports the absence of an operational backend. */
+        /** Natural termination signal; never emitted by an unavailable engine. */
+        public signal void ended ();
+
+        /** Runtime error signal; load operations throw directly instead. */
+        public signal void failed (string message);
+
+        /** Pause-state signal; never emitted by an unavailable engine. */
+        public signal void pause_changed (bool paused);
+
+        /** Position signal; never emitted by an unavailable engine. */
+        public signal void position_changed (int64 position_us);
+
+        /** Duration signal; never emitted by an unavailable engine. */
+        public signal void duration_changed (int64 duration_us);
+
+        /** Reports missing engine without inventing a successful file load. */
         public async void open_async (MediaSource source,
                                       Cancellable? cancellable = null) throws Error {
             cancellable?.set_error_if_cancelled ();
@@ -18,27 +33,32 @@ namespace MediaKit {
             throw new MediaError.ENGINE_UNAVAILABLE (native_engine_unavailable_reason ());
         }
 
-        /** Refuses playback because no stream can be opened yet. */
+        /** Refuses playback without an operational native engine. */
         public void play () throws Error {
             throw new MediaError.ENGINE_UNAVAILABLE (native_engine_unavailable_reason ());
         }
 
-        /** Refuses pause because no stream can be opened yet. */
+        /** Refuses pause without an operational native engine. */
         public void pause () throws Error {
             throw new MediaError.ENGINE_UNAVAILABLE (native_engine_unavailable_reason ());
         }
 
-        /** Refuses stop because no stream can be opened yet. */
+        /** Refuses stop without an operational native engine. */
         public void stop () throws Error {
             throw new MediaError.ENGINE_UNAVAILABLE (native_engine_unavailable_reason ());
         }
 
-        /** Refuses seek because no stream can be opened yet. */
+        /** Refuses seek without an operational native engine. */
         public void seek (int64 position_us) throws Error {
             throw new MediaError.ENGINE_UNAVAILABLE (native_engine_unavailable_reason ());
         }
 
-        /** Does nothing because the unavailable adapter owns no media resources. */
+        /** Refuses GL renderer creation without an operational native engine. */
+        public OpenGlOutput create_opengl_output () throws Error {
+            throw new MediaError.ENGINE_UNAVAILABLE (native_engine_unavailable_reason ());
+        }
+
+        /** No native resources exist in this backend. */
         public void close () {
         }
     }

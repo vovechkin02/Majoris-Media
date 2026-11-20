@@ -34,3 +34,18 @@ if get_option('gtk')
     timeout: 30,
   )
 endif
+
+if mpv.found()
+  playback_test = executable(
+    'test-engine-playback',
+    'integration/engine-playback.vala',
+    dependencies: [core_api],
+  )
+  test(
+    'media-engine-playback',
+    playback_test,
+    args: [meson.current_source_dir() / 'fixtures/short-tone.wav'],
+    suite: 'integration',
+    timeout: 15,
+  )
+endif

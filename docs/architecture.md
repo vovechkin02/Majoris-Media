@@ -1,118 +1,96 @@
-# Architecture — Stage 1
+# Architecture — Stage 2 (0.2.0)
 
-## Scope and invariants
-
-This phase establishes API names and ownership boundaries only. No decoder,
-demuxer, renderer, audio mixer, disc reader, stream client or codec probing is
-integrated. An unavailable operation MUST fail rather than return a plausible
-metadata object, claim a native HDR path, or emit `PLAYING`.
-
-The architecture follows the split proven by Majoris Image 2.0.1: Core is
-GTK-independent, and GTK presentation consumes Core rather than the inverse.
-The similarity is the component boundary, not an assumption that video can be
-rendered using ImageKit's still-image buffer model.
+## Component and dependency structure
 
 ```text
-              Media Player / Files / other Majoris apps
-                            |       |
-                 MediaKitGtk |       | MediaKit
-                      |      |       |
-                 GTK widgets --------> Core APIs
-                                      |
-                            PlaybackBackend (internal)
-                                      |
-                          Native engine adapter (C)
-                                      |
-                          [Stage 2: libmpv bridge]
-                                      |
-                FFmpeg / rendering / output via engine
+       Media Player, Files, other consumers
+                  |            |
+                  v            v
+          MediaKitGtk          MediaKit Core
+          GtkGLArea     <------ MediaSession (Facade)
+          MediaControls            |
+                              PlaybackBackend (Strategy)
+                                /           \
+                      MpvBackend          UnavailableBackend
+                          |
+                 C GObject engine adapter
+                   libmpv client API
+                      /       \
+              libmpv player    libmpv OpenGL render API
+                   |                    |
+              FFmpeg/audio          GtkGLArea framebuffer
 ```
 
-### Dependency rules
+The Core depends on GLib/GIO and, when `-Dmpv=enabled`, libmpv and libepoxy.
+It does **not** link GTK. The optional GTK4 library depends on Core, GTK4, and
+embedded XML resources. `MediaView` does not own a top-level window, playlists,
+or an application's styling policy. libmpv drives demux/decode/clocks/audio;
+MediaKit does not reimplement these subsystems.
 
-1. `MediaKit` links only GLib/GIO and its own native C shim in Stage 1.
-2. `MediaKitGtk` links `MediaKit` plus GTK4. Its resource templates are bundled
-   into the GTK library, not installed in a separate application directory.
-3. Consumer applications own GTK windows, toolbars, playlists, settings and
-   their other application-specific UI. The media widget owns no top-level
-   application instance or window.
-4. Native adapter decisions and library-specific error codes stay private.
-5. ImageKit will remain responsible for artwork and still-image processing
-   when Media Player integration is added; MediaKit will own moving media.
+## Operational ownership
 
-## Contracts and lifecycle
+Each `MediaSession` owns exactly one `PlaybackBackend`. Empty sessions use the
+non-playing placeholder without creating libmpv handles; a real engine is
+constructed only on `open_async`. Replacing a source
+creates a fresh backend/engine instance, avoiding confusion between stale
+`FILE_LOADED`/`END_FILE` events and the next source. Before releasing the
+old engine the session replaces its backend and emits `output_changed`;
+consumers detach old OpenGL renderers and attach a new one, while both engine
+objects are still alive. The previous backend is then closed. A canceled
+open's callbacks cannot change a newer session generation.
 
-`MediaSource` wraps a GIO file. Path construction accepts a nonempty local path;
-URI construction accepts only `file:`, `http:`, or `https:`. Neither operation
-opens or validates an actual media file in Stage 1.
+The native `MediaKitEngine` owns one libmpv handle and at most one active
+`MediaKitRenderer` (nonowning link); the renderer strongly retains its engine.
+The GTK wrapper `OpenGlOutput` holds the native renderer and frees it with
+the rendering GL context current. GTK view/controls own signal subscriptions
+only while bound to a session. All subscriptions are disconnected on rebinding.
 
-Each `MediaSession` owns one `PlaybackBackend` instance and exposes an enum
-state, latest error, selected source, policy options, capability snapshot,
-and `state_changed` signal. The initial backend is `UnavailableBackend`.
-A real backend will replace that internal implementation, not the public API.
-The native C functions in `native/playback/engine-adapter.[ch]` are a deliberate
-seam and currently expose *only* backend unavailability.
+## Threading and GL context constraints
 
-- `EMPTY`: initial or after `close()`; source and error are null.
-- `OPENING`: a live `open_async` request has begun.
-- `READY`: a backend actually finished opening a source. Not reachable Stage 1.
-- `PLAYING`, `PAUSED`, `STOPPED`, `ENDED`: reserved for real backend transitions.
-- `ERROR`: a non-cancellation open failure. Error and requested source remain
-  available until replaced or closed.
-- A request canceled before opening does not modify session state. A canceled
-  current opening resets to `EMPTY`. Superseded completion must not mutate a
-  newer generation or republish a stale source.
-- `play`, `pause`, `stop`, `seek` propagate backend errors without changing
-  the state. Seeking uses signed 64-bit **microseconds**; negatives fail first.
-- No open call reports READY until an actual backend confirms readiness.
+- libmpv may invoke its wakeup/update callbacks on worker threads. Native C
+  schedules coalesced idle sources for the engine's owning main context; it
+  never calls GTK directly from worker callbacks.
+- Native open completion uses `GTask` and waits for `MPV_EVENT_FILE_LOADED`.
+  A command being queued does **not** qualify as a successfully loaded file.
+- libmpv's OpenGL render context is created only after GTK's GLArea has a
+  current context. `mpv_render_context_render` targets GTK's currently bound
+  framebuffer, with physical-pixel width/height, avoiding CPU readback.
+- The initial implementation deliberately does **not** enable
+  `MPV_RENDER_PARAM_ADVANCED_CONTROL`. That mode imposes additional strict
+  render/core synchronization and update-callback obligations which must be
+  designed and measured separately. Frame notifications are dispatched to GTK
+  and the renderer invokes `mpv_render_context_update()` before drawing.
+- One active video renderer per session: libmpv currently supports only one
+  render context per player core. A second view must use a distinct session.
+- GTK GLArea unrealization/source replacement must free the render context
+  *before* its GL context is destroyed. Rendering on an unrelated thread or
+  context is prohibited.
+- Core may be used without GTK for audio, source lifecycle or future probes;
+  video without an initialized GL output is not guaranteed to decode/display.
 
-`MediaProbe` has its own asynchronous API but is not tied to GUI objects.
-It explicitly reports that the probe engine is absent, rather than constructing
-fabricated `MediaDescription` objects.
+## Design patterns and justification
 
-`MediaCapabilities` deliberately distinguishes `UNKNOWN` and `UNVERIFIED` from
-`AVAILABLE`, `UNAVAILABLE` and verified HDR presentation; metadata flags do not
-imply device/output capabilities. The first delivered snapshot establishes
-`playback_engine=UNAVAILABLE`, while leaving monitor HDR and encoded audio
-output *unverified*.
-
-`MediaView` and `MediaControls` subscribe to session state only while bound.
-Each keeps a handler ID and disconnects on replacement and GObject disposal.
-The XML template's `render_host` is a reserved presentation slot, not a fake
-GtkGLArea that would prematurely constrain Stage 2.
-
-All callbacks for GTK and session state are expected on the caller's owning
-GLib main context. Thread-safe remote control and worker dispatch are
-**not** promised by Stage 1.
-
-## Design patterns (GoF intent)
-
-| Design decision | Role | Why it exists |
+| GoF pattern or idiom | Participants | Actual variation and contract |
 | --- | --- | --- |
-| `MediaSession` | Facade | Single API over lifecycle, source and future engine operations; not a God Object |
-| `PlaybackBackend` | Strategy boundary | Playback implementations can vary without changing session API; no per-frame virtual calls |
-| `UnavailableBackend` | Null-unavailable implementation, not Null Object | Explicit errors, no silently successful no-ops |
-| `native/playback/engine-adapter.c` | C integration seam | Adapts future native engine interfaces, error/ownership; presently a stub, not an active Adapter instance |
-| `state_changed` | GObject Observer idiom | GTK consumers can observe independently without custom event bus |
+| Facade | `MediaSession` | Stable consumer commands over native engine lifecycle |
+| Strategy | `PlaybackBackend`, `MpvBackend`, `UnavailableBackend` | Optional engine availability without consumer-side backend checks |
+| Adapter | Native C GObject engine and VAPI | Converts libmpv commands, errors, events, threads and ownership into GLib contracts |
+| Observer (GLib idiom) | Session and OpenGL output signals | GTK subscribers observe changes without a second custom event bus |
 
-The GTK view is composed with a Core session. There is no Singleton, second
-status bus, broad service locator, forced Abstract Factory or pattern hierarchy
-for every media codec. Actual GoF participant contracts will be updated when a
-real playback engine is introduced.
+Pattern names are justified by roles, not decorative class hierarchies. The
+renderer is a context-bound resource wrapper, not an unrelated Abstract Factory.
+Private C binding types never appear in the installed public API. Avoid
+per-frame dynamic dispatch beyond the unavoidable single GL renderer call.
 
-## Stage 2 integration boundary
+## Known limitations and next steps
 
-Stage 2 is expected to add a functioning `libmpv`-backed implementation. Work
-must establish the precise native event context, ownership of mpv handles and
-render contexts, thread/hardware restrictions, error-code mapping, async
-cancel/shutdown, GPU context loss and output-device negotiation.
+This prototype has not been compiled or run on Debian in the authoring
+container. It does not provide dedicated media probing, enumerated subtitle
+tracks, playlists, disc navigation, verified hardware decode interop,
+HDR/gpu-next/Dolby Vision Profile 7 FEL output, or HDMI encoded passthrough.
+These require their own implementation and validation stages; see formats.md.
 
-**Do not** assume that existing embedded libmpv OpenGL rendering supports
-all of `gpu-next`, Dolby Vision Profile 7 enhancement-layer processing, native
-Wayland HDR scanout or encoded Atmos/DTS:X passthrough. Those remain separate
-capabilities to verify with real hardware and reference media, and may require
-an alternate rendering/output solution behind the existing boundary.
-
-This phase intentionally introduces no `mpv` build dependency and copies no
-VLC sources. VLC's demuxing, disc and audio-output implementations remain
-architectural references subject to their own licensing and integration tests.
+Potential performance work after baseline qualification: move mpv initialization
+and teardown off the GTK main thread where measured to block, adopt advanced
+render controls only with correct synchronization, and resolve Wayland/X11 GPU
+interop when specific hardware warrants it. Do not optimize speculatively.
