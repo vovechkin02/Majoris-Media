@@ -17,6 +17,12 @@ namespace MediaKit {
         /** Source video transfer characteristic from mpv, not verified HDR scanout. */
         public string source_transfer { get; construct; default = ""; }
 
+        /** Post-processing/rendering color primaries, not the compositor scanout format. */
+        public string output_primaries { get; construct; default = ""; }
+
+        /** Post-processing/rendering transfer curve, not confirmed HDMI signaling. */
+        public string output_transfer { get; construct; default = ""; }
+
         /** IPC observations alone never prove a compositor's native HDR output. */
         public CapabilityStatus native_hdr { get; construct; default = CapabilityStatus.UNVERIFIED; }
 
@@ -29,6 +35,23 @@ namespace MediaKit {
                 video_output: video_output,
                 source_primaries: source_primaries,
                 source_transfer: source_transfer
+            );
+        }
+
+        /** Creates a richer rendering-path observation without inferring monitor HDR. */
+        public GpuNextPlaybackStatus.with_output (
+            bool paused, int64 position_us, string video_output,
+            string source_primaries, string source_transfer,
+            string output_primaries, string output_transfer
+        ) {
+            Object (
+                paused: paused,
+                position_us: position_us,
+                video_output: video_output,
+                source_primaries: source_primaries,
+                source_transfer: source_transfer,
+                output_primaries: output_primaries,
+                output_transfer: output_transfer
             );
         }
     }

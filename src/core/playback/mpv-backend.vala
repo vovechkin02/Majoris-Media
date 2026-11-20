@@ -319,6 +319,12 @@ namespace MediaKit {
             return new OpenGlOutput (engine.create_renderer ());
         }
 
+        /** Requests the patched gpu-next GL renderer without falling back to legacy. */
+        public OpenGlOutput create_experimental_gpu_next_output () throws Error {
+            ensure_open ();
+            return new OpenGlOutput (engine.create_renderer_gpu_next ());
+        }
+
         /** Invalidates callbacks and pending work before releasing native resources. */
         public void close () {
             if (closed) {

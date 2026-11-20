@@ -33,6 +33,8 @@ private void test_gpu_next_controller (string support_path) {
                                         assert (snapshot.video_output == "gpu-next");
                                         assert (snapshot.source_primaries == "bt.2020");
                                         assert (snapshot.source_transfer == "pq");
+                                        assert (snapshot.output_primaries == "bt.709");
+                                        assert (snapshot.output_transfer == "bt.1886");
                                         assert (snapshot.native_hdr !=
                                             MediaKit.CapabilityStatus.AVAILABLE);
                                         finished = true;

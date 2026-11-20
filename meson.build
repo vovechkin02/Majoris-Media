@@ -1,7 +1,7 @@
 project(
   'majoris-media',
   ['c', 'vala'],
-  version: '0.7.2',
+  version: '0.7.3',
   license: 'GPL-3.0-or-later',
   meson_version: '>=1.4',
   default_options: ['c_std=gnu11', 'warning_level=2'],
@@ -14,6 +14,16 @@ gio = dependency('gio-2.0', version: '>=2.76')
 json_glib = dependency('json-glib-1.0', version: '>=1.6')
 mpv = dependency('mpv', required: get_option('mpv'))
 epoxy = dependency('epoxy', required: mpv.found())
+experimental_embedded_gpu_next = get_option('experimental_embedded_gpu_next')
+if experimental_embedded_gpu_next
+  if not mpv.found()
+    error('Experimental embedded gpu-next requires a patched libmpv dependency')
+  endif
+  cc = meson.get_compiler('c')
+  if not cc.has_header_symbol('mpv/render.h', 'MPV_RENDER_PARAM_BACKEND', dependencies: mpv)
+    error('The selected libmpv headers lack the experimental MPV_RENDER_PARAM_BACKEND API')
+  endif
+endif
 gir_compiler = find_program(
   'gi-compile-repository',
   'g-ir-compiler',
@@ -41,14 +51,15 @@ summary(
     'libmpv playback enabled': mpv.found(),
     'Embedded OpenGL enabled': mpv.found() and get_option('gtk'),
     'Native HDR embedding verified': false,
-    'Embedded gpu-next available': false,
+    'Experimental embedded gpu-next compiled': experimental_embedded_gpu_next,
     'Standalone gpu-next Wayland launcher': true,
+    'Native HDR display qualification': false,
     'Private IPC playback controller': true,
     'GTK external playback controls': get_option('gtk'),
     'Example consumer': get_option('examples') and get_option('gtk'),
     'Introspection': gir_compiler.found(),
     'Tests': get_option('tests'),
   },
-  section: 'Majoris Media Stage 7 native HDR candidate',
+  section: 'Majoris Media 0.7.3 advanced renderer integration',
   bool_yn: true,
 )

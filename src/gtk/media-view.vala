@@ -37,6 +37,32 @@ namespace MediaKitGtk {
             }
         }
 
+        /** Opt-in for the unmerged libmpv gpu-next OpenGL render API.
+         *
+         * The request is strict: if the current build or backend does not support
+         * the patched API, the widget reports a rendering error instead of
+         * switching silently to the original OpenGL renderer. The host must set
+         * this property deliberately; native HDR display output is not implied.
+         */
+        public bool experimental_gpu_next {
+            get {
+                return use_experimental_gpu_next;
+            }
+            set {
+                if (use_experimental_gpu_next == value) {
+                    return;
+                }
+                release_renderer ();
+                use_experimental_gpu_next = value;
+                render_failure = null;
+                setup_renderer ();
+                update_status ();
+            }
+        }
+
+        /** Current backend request, separate from observed compositor capabilities. */
+        private bool use_experimental_gpu_next = false;
+
         /** Host-provided monitor ICC profile; no automatic display detection is assumed. */
         private Bytes? display_icc_profile;
 
@@ -229,7 +255,9 @@ namespace MediaKitGtk {
                 return;
             }
             try {
-                output = current_session.create_opengl_output ();
+                output = use_experimental_gpu_next
+                    ? current_session.create_experimental_gpu_next_output ()
+                    : current_session.create_opengl_output ();
                 if (display_icc_profile != null) {
                     output.set_display_icc_profile (display_icc_profile);
                 }

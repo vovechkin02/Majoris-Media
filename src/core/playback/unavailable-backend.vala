@@ -153,6 +153,11 @@ namespace MediaKit {
             throw new MediaError.ENGINE_UNAVAILABLE (native_engine_unavailable_reason ());
         }
 
+        /** The missing native engine cannot create an experimental GL endpoint. */
+        public OpenGlOutput create_experimental_gpu_next_output () throws Error {
+            throw new MediaError.ENGINE_UNAVAILABLE (native_engine_unavailable_reason ());
+        }
+
         /** No native resources exist in this backend. */
         public void close () {
         }

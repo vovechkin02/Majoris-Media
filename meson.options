@@ -3,3 +3,6 @@ option('gtk', type: 'boolean', value: true, description: 'Build the optional GTK
 option('examples', type: 'boolean', value: true, description: 'Build an interactive GTK playback example')
 option('tests', type: 'boolean', value: true, description: 'Build focused playback contracts and integration checks')
 option('introspection', type: 'feature', value: 'auto', description: 'Generate GIR typelibs if tooling is available')
+
+option('experimental_embedded_gpu_next', type: 'boolean', value: false,
+       description: 'Opt in to unmerged libmpv OpenGL gpu-next rendering ABI (requires matching patched headers and library)')

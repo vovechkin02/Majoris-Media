@@ -34,6 +34,8 @@ def respond(command, state):
             return "gpu-next"
         if property_name == "video-params":
             return {"primaries": "bt.2020", "gamma": "pq"}
+        if property_name == "video-out-params":
+            return {"primaries": "bt.709", "gamma": "bt.1886"}
         raise KeyError(property_name)
     if operation == "set_property" and arguments[0] == "pause":
         state["pause"] = arguments[1]

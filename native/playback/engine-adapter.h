@@ -275,6 +275,25 @@ void mediakit_engine_close(MediaKitEngine *self);
  */
 MediaKitRenderer *mediakit_engine_create_renderer(MediaKitEngine *self, GError **error);
 
+/** mediakit_engine_has_experimental_gpu_next:
+ *
+ * Returns: TRUE only when compiled against the separately enabled, patched
+ * libmpv OpenGL gpu-next API. Does not establish native HDR display support.
+ */
+gboolean mediakit_engine_has_experimental_gpu_next(void);
+
+/** mediakit_engine_create_renderer_gpu_next:
+ * @self: Engine with an initialized libmpv context.
+ * @error: (out) (optional): Unsupported API or render-context failure.
+ *
+ * Explicitly selects the unmerged gpu-next OpenGL backend with the patched
+ * MPV_RENDER_PARAM_BACKEND parameter. Never silently switches to legacy GL.
+ * Only one attached renderer is allowed and a current GL context is required.
+ * Returns: (transfer full) (nullable): Renderer, or NULL with an error.
+ */
+MediaKitRenderer *mediakit_engine_create_renderer_gpu_next(MediaKitEngine *self,
+                                                           GError **error);
+
 /** mediakit_renderer_render:
  * @self: Renderer attached to the current OpenGL context.
  * @width_px: Positive target framebuffer width.

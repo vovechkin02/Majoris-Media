@@ -52,7 +52,8 @@ namespace MediaKit {
                 render_depth_bits: read_int (metadata, "render-depth-bits"),
                 icc_profile_active: read_bool (metadata, "icc-active"),
                 frame_submitted: read_bool (metadata, "frame-submitted"),
-                presentation: read_bool (metadata, "frame-submitted")
+                presentation: read_bool (metadata, "frame-submitted") &&
+                    read_string (metadata, "backend") == "libmpv-opengl"
                     ? HdrPresentation.TONE_MAPPED_SDR : HdrPresentation.UNVERIFIED
             );
         }

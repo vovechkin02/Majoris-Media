@@ -167,6 +167,8 @@ namespace MediaKit {
             string vo = "";
             string primaries = "";
             string transfer = "";
+            string output_primaries = "";
+            string output_transfer = "";
             try {
                 var position_node = yield transport.request_async (
                     "get_property", "time-pos", null, null, null, cancellable
@@ -209,8 +211,29 @@ namespace MediaKit {
             } catch (Error error) {
                 // Source metadata can legitimately be absent for audio-only streams.
             }
-            return new GpuNextPlaybackStatus (
-                paused, position_us, vo, primaries, transfer
+            try {
+                // video-out-params describes mpv's rendered image, not actual
+                // Wayland protocol negotiation or the display's active EOTF.
+                var output_node = yield transport.request_async (
+                    "get_property", "video-out-params", null, null, null, cancellable
+                );
+                if (output_node.get_node_type () == Json.NodeType.OBJECT) {
+                    var output_params = output_node.get_object ();
+                    if (output_params.has_member ("primaries")) {
+                        output_primaries = output_params.get_string_member ("primaries");
+                    }
+                    if (output_params.has_member ("gamma")) {
+                        output_transfer = output_params.get_string_member ("gamma");
+                    }
+                }
+            } catch (IOError.CANCELLED error) {
+                throw error;
+            } catch (Error error) {
+                // Some mpv versions/stream types have no post-processing snapshot.
+            }
+            return new GpuNextPlaybackStatus.with_output (
+                paused, position_us, vo, primaries, transfer,
+                output_primaries, output_transfer
             );
         }
 

@@ -547,6 +547,38 @@ private void test_stage7_gpu_next_arguments () {
     playback.close ();
 }
 
+/** Verifies optional embedded backend requests do not claim native HDR. */
+private void test_stage7_experimental_embedding () {
+    var session = new MediaKit.MediaSession ();
+    bool available = MediaKit.MediaSession.supports_experimental_gpu_next_embedding ();
+    if (!available) {
+        bool rejected = false;
+        try {
+            session.create_experimental_gpu_next_output ();
+        } catch (Error error) {
+            rejected = true;
+        }
+        assert (rejected);
+    }
+    var builder = new VariantBuilder (new VariantType ("a{sv}"));
+    builder.add ("{sv}", "backend", new Variant.string ("libmpv-gpu-next-experimental"));
+    builder.add ("{sv}", "red-bits", new Variant.int32 (10));
+    builder.add ("{sv}", "green-bits", new Variant.int32 (10));
+    builder.add ("{sv}", "blue-bits", new Variant.int32 (10));
+    builder.add ("{sv}", "frame-submitted", new Variant.boolean (true));
+    var snapshot = new MediaKit.VideoRenderingInformation.from_metadata (builder.end ());
+    assert (snapshot.has_ten_bit_framebuffer);
+    assert (snapshot.backend == "libmpv-gpu-next-experimental");
+    assert (snapshot.presentation != MediaKit.HdrPresentation.NATIVE_HDR);
+    assert (snapshot.presentation != MediaKit.HdrPresentation.TONE_MAPPED_SDR);
+    var status = new MediaKit.GpuNextPlaybackStatus.with_output (
+        true, 1000000, "gpu-next", "bt.2020", "pq", "bt.709", "bt.1886"
+    );
+    assert (status.output_primaries == "bt.709");
+    assert (status.output_transfer == "bt.1886");
+    assert (status.native_hdr != MediaKit.CapabilityStatus.AVAILABLE);
+}
+
 /** Registers small, deterministic public Core API checks. */
 int main (string[] args) {
     Test.init (ref args);
@@ -567,5 +599,6 @@ int main (string[] args) {
     Test.add_func ("/media/core/stage7-rendering-policy", test_stage7_video_policies);
     Test.add_func ("/media/core/stage7-gpu-next-candidate", test_stage7_gpu_next_capabilities);
     Test.add_func ("/media/core/stage7-gpu-next-arguments", test_stage7_gpu_next_arguments);
+    Test.add_func ("/media/core/stage7-experimental-embedding", test_stage7_experimental_embedding);
     return Test.run ();
 }

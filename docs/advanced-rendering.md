@@ -145,3 +145,44 @@ proposed OpenGL embedding change. Attempting a private ABI or foreign Wayland
 subsurface hack would make the library less reliable. A complete replacement
 would require a substantial independently maintained decoder/render/sync
 pipeline, outside a safe incremental Stage 7 completion.
+
+## Stage 7.3 experimental embedded OpenGL gpu-next (0.7.3)
+
+**Build contract:** stock libmpv continues to use the legacy GPU OpenGL
+render API. An unmerged upstream draft, [mpv PR #16818](https://github.com/mpv-player/mpv/pull/16818),
+adds `MPV_RENDER_PARAM_BACKEND` for caller-owned OpenGL framebuffer rendering
+with libplacebo. We do not vendor that patch, assume its ABI, or enable it in
+ordinary packages. `-Dexperimental_embedded_gpu_next=true` explicitly selects
+this nonstandard build variant and requires matching patched libmpv headers.
+At compile time the native adapter uses the symbolic enum from those headers,
+never a private numeric ID. A failed context creation is reported to the
+caller; no legacy fallback is attempted.
+
+**Host API:** `MediaView.experimental_gpu_next` switches renderer attachment
+only after correctly detaching the previous context. Core also has
+`MediaSession.create_experimental_gpu_next_output()` and the conservative
+`supports_experimental_gpu_next_embedding()` probe. The GObject API is extended
+additively; existing playback/render contracts remain available. Renderer
+telemetry identifies `libmpv-gpu-next-experimental` separately from
+`libmpv-opengl`. Experimental GPU-next output is classified `UNVERIFIED`,
+**not** tone-mapped SDR or confirmed native HDR, until actual color-state and
+monitor negotiation is implemented and measured.
+
+**Why this does not close native HDR:** `GtkGLArea` owns an ordinary framebuffer,
+and its color-state/Wayland presentation contract is not established by a
+patched libmpv renderer. An end-to-end HDR implementation would require an
+appropriate HDR-capable GTK/GDK texture or Vulkan surface, Mutter/Wayland
+color-management negotiation and output verification. The patched renderer
+only solves the rendering-algorithm boundary. The upstream Vulkan
+caller-owned render API proposal [#18343](https://github.com/mpv-player/mpv/issues/18343)
+was closed as not planned. Proprietary Dolby Vision display signaling and
+HDMI HDR10+ dynamic metadata remain outside the claims.
+
+**Additional diagnostics:** The independent `GpuNextWindow` now obtains
+`video-out-params` (when mpv exposes it). `GpuNextPlaybackStatus` reports
+source primaries/transfer alongside post-processing primaries/transfer; the
+latter are not proof of scanout. Missing optional properties do not cancel
+playback, while a user cancellation still propagates promptly.
+
+See [0.7.3 verification](verification-stage7-embedded.md) for build and
+hardware qualification requirements.

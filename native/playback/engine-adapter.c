@@ -65,6 +65,7 @@ struct _MediaKitRenderer {
     gint render_depth_bits;
     gboolean icc_profile_active;
     gboolean frame_submitted;
+    gboolean experimental_gpu_next;
     gboolean framebuffer_information_valid;
     gint last_framebuffer;
 #ifdef MEDIAKIT_HAVE_MPV
@@ -1425,32 +1426,58 @@ mediakit_engine_close(MediaKitEngine *self)
 #endif
 }
 
-/** Attaches the current OpenGL context as the unique native video renderer. */
-MediaKitRenderer *
-mediakit_engine_create_renderer(MediaKitEngine *self, GError **error)
+/** Tests only the build-selected libmpv ABI, not GPU or monitor capability. */
+gboolean
+mediakit_engine_has_experimental_gpu_next(void)
+{
+#ifdef MEDIAKIT_EXPERIMENTAL_EMBEDDED_GPU_NEXT
+    return TRUE;
+#else
+    return FALSE;
+#endif
+}
+
+/** Attaches the current host OpenGL context using the explicitly selected API. */
+static MediaKitRenderer *
+create_renderer_with_mode(MediaKitEngine *self, gboolean experimental, GError **error)
 {
 #ifdef MEDIAKIT_HAVE_MPV
     mpv_opengl_init_params init = { .get_proc_address = resolve_gl, .get_proc_address_ctx = NULL };
-    mpv_render_param params[] = {
+    mpv_render_param params[4] = {
         { MPV_RENDER_PARAM_API_TYPE, (void *)MPV_RENDER_API_TYPE_OPENGL },
         { MPV_RENDER_PARAM_OPENGL_INIT_PARAMS, &init },
+        { MPV_RENDER_PARAM_INVALID, NULL },
         { MPV_RENDER_PARAM_INVALID, NULL }
     };
     MediaKitRenderer *renderer;
     int status;
+
     if (self->player == NULL || self->active_renderer != NULL) {
         g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_BUSY,
                             "An initialized engine and one unused video renderer are required");
         return NULL;
     }
+    if (experimental) {
+#ifdef MEDIAKIT_EXPERIMENTAL_EMBEDDED_GPU_NEXT
+        /* Only the patched ABI exposes this parameter; it is never guessed. */
+        params[2] = (mpv_render_param){ MPV_RENDER_PARAM_BACKEND, (void *)"gpu-next" };
+#else
+        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED,
+                            "Experimental embedded gpu-next was not built; use the supported OpenGL renderer or the separate Wayland player");
+        return NULL;
+#endif
+    }
     renderer = g_object_new(MEDIAKIT_TYPE_RENDERER, NULL);
     renderer->engine = g_object_ref(self);
     status = mpv_render_context_create(&renderer->render_context, self->player, params);
     if (status < 0) {
-        set_mpv_error(error, status, "Could not initialize embedded OpenGL video output");
+        set_mpv_error(error, status,
+                      experimental ? "Patched embedded gpu-next failed"
+                                   : "Could not initialize embedded OpenGL video output");
         g_object_unref(renderer);
         return NULL;
     }
+    renderer->experimental_gpu_next = experimental;
     self->active_renderer = renderer;
     mpv_render_context_set_update_callback(renderer->render_context,
                                            on_render_update, renderer);
@@ -1460,6 +1487,22 @@ mediakit_engine_create_renderer(MediaKitEngine *self, GError **error)
                         mediakit_engine_unavailable_reason());
     return NULL;
 #endif
+}
+
+/** Preserves the original stable OpenGL API and its existing behavior. */
+MediaKitRenderer *
+mediakit_engine_create_renderer(MediaKitEngine *self, GError **error)
+{
+    g_return_val_if_fail(MEDIAKIT_IS_ENGINE(self), NULL);
+    return create_renderer_with_mode(self, FALSE, error);
+}
+
+/** Selects experimental gpu-next only on builds explicitly compiled for it. */
+MediaKitRenderer *
+mediakit_engine_create_renderer_gpu_next(MediaKitEngine *self, GError **error)
+{
+    g_return_val_if_fail(MEDIAKIT_IS_ENGINE(self), NULL);
+    return create_renderer_with_mode(self, TRUE, error);
 }
 
 /** Emits render requests only on the creating main context. */
@@ -1577,7 +1620,9 @@ mediakit_renderer_get_output_information(MediaKitRenderer *self)
     if (!self->released) {
 #ifdef MEDIAKIT_HAVE_MPV
         g_variant_builder_add(&builder, "{sv}", "backend",
-                              g_variant_new_string("libmpv-opengl"));
+                              g_variant_new_string(self->experimental_gpu_next
+                                                   ? "libmpv-gpu-next-experimental"
+                                                   : "libmpv-opengl"));
 #endif
         g_variant_builder_add(&builder, "{sv}", "red-bits",
                               g_variant_new_int32(self->red_bits));

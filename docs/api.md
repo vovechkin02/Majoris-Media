@@ -237,3 +237,32 @@ The compositor and connected monitor must support native HDR negotiation for
 native HDR; detecting BT.2020/PQ source metadata or a gpu-next VO alone proves
 neither native HDR scanout nor Dolby Vision Profile 7 FEL reconstruction.
 The GTK-embedded `MediaView` remains its previous SDR libmpv OpenGL view.
+
+## Stage 7.3 — experimental embedded gpu-next compatibility
+
+A stock libmpv build still renders through the existing `MediaSession`
+`create_opengl_output()` and `MediaKitGtk.MediaView` APIs. Experimental
+embedding is **disabled by default** and must be compiled against matching
+patched libmpv headers/runtime through
+`-Dexperimental_embedded_gpu_next=true`. It requires the unmerged symbolic
+`MPV_RENDER_PARAM_BACKEND` parameter; Meson rejects missing headers.
+
+- `MediaKit.MediaSession.supports_experimental_gpu_next_embedding()` reports
+  compile-time support only. It is not a GPU, swapchain, or HDR test.
+- `MediaKit.MediaSession.create_experimental_gpu_next_output()` creates an
+  explicit gpu-next OpenGL attachment or returns an error. No silent fallback.
+- `MediaKitGtk.MediaView.experimental_gpu_next` requests that same path on an
+  attached/realized view. Changing it detaches the previous GL endpoint first.
+- `VideoRenderingInformation.backend` identifies
+  `libmpv-gpu-next-experimental` when used. `presentation` stays `UNVERIFIED`
+  for this path even with a submitted frame or 10-bit local framebuffer.
+- `GpuNextPlaybackStatus.output_primaries` and `output_transfer` describe
+  `video-out-params` reported by the separately windowed mpv process when
+  available. These values are distinct from `source_primaries` and
+  `source_transfer`. They do **not** establish actual monitor EOTF or HDMI
+  dynamic metadata signaling. The existing constructor remains available;
+  the new `.with_output(...)` constructor adds the observations.
+
+The draft upstream interface is experimental and **not suitable for the normal
+Debian package**. The default libmpv renderer and all existing playback APIs
+remain unchanged. See `docs/verification-stage7-embedded.md`.

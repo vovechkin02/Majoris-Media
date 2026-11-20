@@ -440,6 +440,16 @@ namespace MediaKit {
             return backend.create_opengl_output ();
         }
 
+        /** Reports compile-time availability of the explicitly opted-in patched libmpv API. */
+        public static bool supports_experimental_gpu_next_embedding () {
+            return native_engine_has_experimental_gpu_next ();
+        }
+
+        /** Creates a patched libmpv gpu-next GL endpoint, never silently downgrading. */
+        public OpenGlOutput create_experimental_gpu_next_output () throws Error {
+            return backend.create_experimental_gpu_next_output ();
+        }
+
         /** Cancels pending work, detaches presentation and empties this session. */
         public void close () {
             ++request_generation;

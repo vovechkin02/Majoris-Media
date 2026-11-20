@@ -6,6 +6,11 @@ private void test_widget_binding () {
     view.session = session;
     controls.session = session;
     assert (view.session == session);
+    assert (!view.experimental_gpu_next);
+    view.experimental_gpu_next = true;
+    assert (view.experimental_gpu_next);
+    view.experimental_gpu_next = false;
+    assert (!view.experimental_gpu_next);
     assert (!view.rendering_information.frame_submitted);
     assert (view.rendering_information.presentation == MediaKit.HdrPresentation.UNVERIFIED);
     assert (controls.session == session);

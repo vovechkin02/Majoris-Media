@@ -107,6 +107,9 @@ namespace MediaKit {
         /** Creates one context-bound GL rendering endpoint when supported. */
         public abstract OpenGlOutput create_opengl_output () throws Error;
 
+        /** Attempts the experimental GPU-next GL render path without any fallback. */
+        public abstract OpenGlOutput create_experimental_gpu_next_output () throws Error;
+
         /** Invalidates the backend and any pending source load. */
         public abstract void close ();
     }
@@ -114,6 +117,10 @@ namespace MediaKit {
     /** Native capability detection for builds with or without libmpv. */
     [CCode (cname = "mediakit_engine_is_available", cheader_filename = "engine-adapter.h")]
     internal extern static bool native_engine_is_available ();
+
+    /** Reports whether the opt-in experimental libmpv render API was compiled. */
+    [CCode (cname = "mediakit_engine_has_experimental_gpu_next", cheader_filename = "engine-adapter.h")]
+    internal extern static bool native_engine_has_experimental_gpu_next ();
 
     /** Native diagnostic for builds without a libmpv playback engine. */
     [CCode (cname = "mediakit_engine_unavailable_reason", cheader_filename = "engine-adapter.h")]

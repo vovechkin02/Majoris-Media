@@ -1,6 +1,6 @@
 # Majoris Media
 
-**Version:** 0.7.2 (Stage 7 advanced playback control and honest HDR capability reporting) · **API namespaces:** `MediaKit-1.0`,
+**Version:** 0.7.3 (Stage 7 advanced playback control and honest HDR capability reporting) · **API namespaces:** `MediaKit-1.0`,
 `MediaKitGtk-1.0` · **Platform:** Majoris OS / Debian 13 · **License:** GPL-3.0-or-later
 
 Majoris Media is a reusable audio/video playback foundation for Majoris applications.
@@ -51,7 +51,7 @@ windows, playlists, toolbars, persistent settings, and fullscreen policy.
 | Embedded video target | SDR BT.709/BT.1886 processing, configurable legacy-compatible tone mapping |
 | Renderer quality | Opt-in bounded debanding, default balanced |
 | Framebuffer telemetry | GL RGB bit depth and render dithering depth measured on active framebuffer; no HDR output inference |
-| Embedded gpu-next | Unavailable in this adapter pending an official supported API |
+| Embedded gpu-next | Default: stable legacy OpenGL. Optional patched-libmpv draft backend is strictly opt-in; unverified native HDR |
 | Standalone gpu-next Wayland | Optional separately windowed mpv 0.42+ process, private JSON IPC, ready-state handshake, pause/seek/query and cleanup; not embedded into GTK |
 | Advanced display negotiation | mpv native Wayland `gpu-next`, source/target hint modes, ST 2094-40 / ST 2094-10 internal tone maps; actual output must be tested |
 | GPU-next FEL reconstruction | Upstream renderer can attempt it; not proven by executable version or this library |
@@ -72,6 +72,32 @@ windows, playlists, toolbars, persistent settings, and fullscreen policy.
 packages; missing dependencies stop configuration rather than silently generating a
 non-playing release. An intentionally non-playing build can use `-Dmpv=disabled`
 for API development and headless testing.
+
+## Stage 7.3 — experimental embedded gpu-next compatibility
+
+The default GTK4 `MediaView` continues to use the supported SDR libmpv/OpenGL
+renderer. **Optional experimental embedded gpu-next** is now available *only*
+for a deliberately selected, matching **patched** libmpv build that exports
+`MPV_RENDER_PARAM_BACKEND` (see upstream draft [#16818](https://github.com/mpv-player/mpv/pull/16818)).
+Stock Debian 13 libmpv does not export this API. The normal build remains
+unaffected and does not compile against or guess an unmerged render ABI.
+
+A developer must explicitly configure `-Dexperimental_embedded_gpu_next=true`
+and supply both patched headers and the matching runtime library. Meson rejects
+missing support at configure time. A host may then opt in through
+`MediaView.experimental_gpu_next = true` or create an endpoint with
+`MediaSession.create_experimental_gpu_next_output()`. Unsupported requests fail
+with an error and **never silently fall back to legacy rendering**. New
+`MediaSession.supports_experimental_gpu_next_embedding()` reports only the
+compiled API capability, not GPU/display support.
+
+The embedded renderer is still supplied a GTK-controlled GL framebuffer and
+is **not certified for native HDR**. A 10-bit framebuffer, a patched gpu-next
+render backend, PQ source metadata, or successful rendering do not establish
+HDR display signaling, Dolby Vision FEL accuracy, or native HDR10+ output.
+`GpuNextPlaybackStatus` now includes source and post-processing color parameters
+separately; neither independently verifies compositor/monitor output. Refer to
+[Stage 7.3 verification](docs/verification-stage7-embedded.md).
 
 ## Stage 7 advanced video — optional separate window
 
@@ -128,9 +154,8 @@ The telemetry is sampled only when needed, not on every decoded frame.
 
 **The embedded view is not native HDR:** libmpv's embedded OpenGL path remains an SDR
 pipeline. A 10-bit framebuffer does not establish HDR scanout. `gpu-next` in the **separate mpv window** may handle Dolby Vision Profile 7
-MEL/FEL and Wayland HDR hints when its runtime dependencies allow it. Complete
-embedded `gpu-next`, HDR10+ metadata passthrough and verified monitor HDR
-remain unimplemented. See
+MEL/FEL and Wayland HDR hints when its runtime dependencies allow it. Upstream-stable embedded `gpu-next`, HDR10+ metadata passthrough and verified monitor HDR
+remain unimplemented. An opt-in experimental embedding API is described above. See
 [advanced rendering](docs/advanced-rendering.md) and
 [Stage 7 verification](docs/verification-stage7.md) and
 [Stage 7.2 verification](docs/verification-stage7-final.md).

@@ -37,6 +37,9 @@ core_c_args = []
 if mpv.found()
   core_dependencies += [mpv, epoxy]
   core_c_args += ['-DMEDIAKIT_HAVE_MPV']
+  if experimental_embedded_gpu_next
+    core_c_args += ['-DMEDIAKIT_EXPERIMENTAL_EMBEDDED_GPU_NEXT']
+  endif
 endif
 
 core_library = shared_library(

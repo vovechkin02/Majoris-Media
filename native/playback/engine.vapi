@@ -84,6 +84,9 @@ namespace MediaKitNative {
         /** Creates one renderer from the current OpenGL context. */
         public Renderer create_renderer () throws GLib.Error;
 
+        /** Creates the separately enabled, unmerged libmpv gpu-next GL endpoint. */
+        public Renderer create_renderer_gpu_next () throws GLib.Error;
+
         /** Delivered when stream or output audio properties change. */
         public signal void audio_metadata_changed ();
 

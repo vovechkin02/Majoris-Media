@@ -1,3 +1,13 @@
+majoris-media (0.7.3-1) unstable; urgency=medium
+
+  * Add an explicitly opt-in experimental libmpv GPU-next OpenGL adapter,
+    requiring patched matching development/runtime libraries at build time.
+  * Preserve the stable embedded SDR rendering behavior on stock Debian.
+  * Expose source versus post-processed color diagnostics without false HDR claims.
+  * Add focused compatibility tests and Stage 7.3 qualification documentation.
+
+ -- Majoris Maintainers <maintainers@invalid.example>  Sat, 21 Nov 2026 09:23:00 +1100
+
 majoris-media (0.7.2-1) unstable; urgency=medium
 
   * Add private, bounded JSON IPC to the standalone Wayland gpu-next renderer.
