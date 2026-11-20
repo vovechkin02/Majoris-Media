@@ -3,5 +3,6 @@
   <gresource prefix="/com/majoris/MediaKitGtk">
     <file>ui/media-view.ui</file>
     <file>ui/media-controls.ui</file>
+    <file>ui/gpu-next-controls.ui</file>
   </gresource>
 </gresources>

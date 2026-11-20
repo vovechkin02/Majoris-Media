@@ -1,3 +1,14 @@
+majoris-media (0.7.2-1) unstable; urgency=medium
+
+  * Add private, bounded JSON IPC to the standalone Wayland gpu-next renderer.
+  * Support asynchronous pause, absolute seek and factual video/status reporting.
+  * Expose HDR10+ ST 2094-40 and Dolby Vision ST 2094-10 tone-map policies.
+  * Add neutral GTK4 advanced transport controls with XML templates.
+  * Add a deterministic process/IPC integration double and packaging checks.
+  * Preserve the legacy embedded OpenGL view and reject unverified native HDR.
+
+ -- Majoris Maintainers <maintainers@invalid.example>  Fri, 20 Nov 2026 20:30:00 +1100
+
 majoris-media (0.7.1-1) unstable; urgency=medium
 
   * Add optional standalone Wayland mpv gpu-next playback for advanced media.

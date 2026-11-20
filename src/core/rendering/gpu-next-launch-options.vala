@@ -10,6 +10,16 @@ namespace MediaKit {
         SOURCE_DYNAMIC
     }
 
+    /** Selects gpu-next's metadata-aware internal tone-mapping algorithm. */
+    public enum GpuNextToneMapping {
+        /** Let the installed libplacebo renderer choose an appropriate algorithm. */
+        AUTO,
+        /** Use HDR10+ ST 2094-40 source metadata where the pipeline provides it. */
+        HDR10_PLUS,
+        /** Use Dolby Vision ST 2094-10 metadata where the pipeline provides it. */
+        DOLBY_VISION
+    }
+
     /** Validated configuration for a separate mpv gpu-next Wayland window. */
     public sealed class GpuNextLaunchOptions : Object {
         /** Preferred output signaling behavior; dynamic mode remains experimental. */
@@ -17,6 +27,13 @@ namespace MediaKit {
             get;
             set;
             default = GpuNextColorHintMode.TARGET;
+        }
+
+        /** Internal tone-mapping policy, independent of output metadata signaling. */
+        public GpuNextToneMapping tone_mapping {
+            get;
+            set;
+            default = GpuNextToneMapping.AUTO;
         }
 
         /** Network sources require a conscious host opt-in. */
@@ -51,6 +68,20 @@ namespace MediaKit {
             default:
                 throw new MediaError.INVALID_ARGUMENT ("Invalid color hint mode");
             }
+            string mapping;
+            switch (tone_mapping) {
+            case GpuNextToneMapping.AUTO:
+                mapping = "auto";
+                break;
+            case GpuNextToneMapping.HDR10_PLUS:
+                mapping = "st2094-40";
+                break;
+            case GpuNextToneMapping.DOLBY_VISION:
+                mapping = "st2094-10";
+                break;
+            default:
+                throw new MediaError.INVALID_ARGUMENT ("Invalid gpu-next tone-mapping mode");
+            }
             var location = source.kind == SourceKind.NETWORK
                 ? source.uri : source.file.get_path ();
             if (location == null || location.length == 0) {
@@ -61,6 +92,7 @@ namespace MediaKit {
                 "--no-config",
                 "--vo=gpu-next",
                 "--gpu-context=waylandvk,wayland",
+                "--tone-mapping=" + mapping,
                 "--hwdec=auto-safe",
                 "--target-colorspace-hint=auto",
                 "--target-colorspace-hint-mode=" + hint_mode,

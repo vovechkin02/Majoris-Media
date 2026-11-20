@@ -1,6 +1,6 @@
 # Majoris Media
 
-**Version:** 0.7.1 (Stage 7 advanced-renderer fallback and policy verification) · **API namespaces:** `MediaKit-1.0`,
+**Version:** 0.7.2 (Stage 7 advanced playback control and honest HDR capability reporting) · **API namespaces:** `MediaKit-1.0`,
 `MediaKitGtk-1.0` · **Platform:** Majoris OS / Debian 13 · **License:** GPL-3.0-or-later
 
 Majoris Media is a reusable audio/video playback foundation for Majoris applications.
@@ -10,7 +10,7 @@ libmpv, and a **GtkGLArea**-attached OpenGL renderer. Applications retain owners
 windows, playlists, toolbars, persistent settings, and fullscreen policy.
 
 > **Verification status:** This is source implementation, not a validated release.
-> Stage 7.1 static checks passed, but Vala, Meson, libmpv and GTK4 development
+> Stage 7.2 static checks passed, but Vala, Meson, libmpv and GTK4 development
 > packages were unavailable in the authoring environment. Native compilation,
 > runtime playback, GTK rendering, ICC processing and hardware output are
 > **not verified**.
@@ -52,8 +52,8 @@ windows, playlists, toolbars, persistent settings, and fullscreen policy.
 | Renderer quality | Opt-in bounded debanding, default balanced |
 | Framebuffer telemetry | GL RGB bit depth and render dithering depth measured on active framebuffer; no HDR output inference |
 | Embedded gpu-next | Unavailable in this adapter pending an official supported API |
-| Standalone gpu-next Wayland | Optional second-window mpv 0.42+ process, async preflight and cleanup; not embedded into GTK |
-| Advanced display negotiation | `--target-colorspace-hint=auto`, target/source/experimental source-dynamic hint modes; actual monitor output must be tested |
+| Standalone gpu-next Wayland | Optional separately windowed mpv 0.42+ process, private JSON IPC, ready-state handshake, pause/seek/query and cleanup; not embedded into GTK |
+| Advanced display negotiation | mpv native Wayland `gpu-next`, source/target hint modes, ST 2094-40 / ST 2094-10 internal tone maps; actual output must be tested |
 | GPU-next FEL reconstruction | Upstream renderer can attempt it; not proven by executable version or this library |
 | Display ICC | Optional caller-provided ICC blob through `mpv_render_context_set_parameter`; profile selection belongs to host |
 | Native HDR policy | `PREFER_NATIVE` rejected until actual GTK/compositor HDR output exists; no false positive |
@@ -79,8 +79,12 @@ The **stable embedded GTK4 view remains SDR**. For advanced video, a separate
 `MediaKit.GpuNextWindow` can launch a system `mpv` **0.42+** process using
 `--vo=gpu-next`, native Wayland GPU contexts and color-management hints.
 It has its own top-level Wayland surface and is **not embedded** in `MediaView`.
-The example application provides an explicit button for this path. The host
-owns the window lifetime and must close it on shutdown.
+The example application provides an explicit button and a separate `GpuNextControls` transport for this path. The host
+owns the window lifetime and must close it on shutdown. A new private
+Unix-domain JSON IPC socket (under a mode-0700 temporary directory) provides
+asynchronous pause/seek and read-only playback status. Playback status
+reports source video color information and video output identity, but cannot
+verify native HDR scanout or full Dolby Vision FEL reconstruction.
 
 ```vala
 var source = new MediaKit.MediaSource.for_path ("/path/to/movie.mkv");
@@ -89,6 +93,13 @@ try {
     yield advanced_window.open_async (source);
 } catch (Error error) {
     warning ("Advanced video cannot start: %s", error.message);
+}
+// When ready, use the same process without launching another player:
+if (advanced_window.ready) {
+    yield advanced_window.set_paused_async (true);
+    yield advanced_window.seek_async (30000000);
+    var status = yield advanced_window.query_status_async ();
+    // status.source_transfer is source metadata, NOT HDR display evidence.
 }
 // Call advanced_window.close () during host disposal.
 ```
@@ -99,8 +110,11 @@ compositor, display, dynamic HDR signal or Dolby Vision reconstruction actually
 works. `GpuNextLaunchOptions` uses fixed argv arguments and rejects unsupported
 disc sources; network playback requires explicit `allow_network=true`.
 `SOURCE_DYNAMIC` enables experimental scene-by-scene HDR10 peak hints, **not**
-full HDMI HDR10+ dynamic metadata. See
-[advanced rendering](docs/advanced-rendering.md).
+full HDMI HDR10+ dynamic metadata. `GpuNextLaunchOptions.tone_mapping` accepts `AUTO`, `HDR10_PLUS` and
+`DOLBY_VISION`; the latter two select internal ST 2094-40/ST 2094-10 tone maps,
+not HDMI metadata transport or a native proprietary Dolby Vision display mode.
+See [advanced rendering](docs/advanced-rendering.md) and
+[Stage 7.2 verification](docs/verification-stage7-final.md).
 
 ## Stage 7 rendering
 
@@ -119,7 +133,7 @@ embedded `gpu-next`, HDR10+ metadata passthrough and verified monitor HDR
 remain unimplemented. See
 [advanced rendering](docs/advanced-rendering.md) and
 [Stage 7 verification](docs/verification-stage7.md) and
-[Stage 7.1 verification](docs/verification-stage7-completion.md).
+[Stage 7.2 verification](docs/verification-stage7-final.md).
 
 ## Codec and output policy
 
@@ -145,7 +159,7 @@ Debian 13 development example:
 
 ```sh
 sudo apt install meson ninja-build valac libglib2.0-dev libgtk-4-dev \
-  libmpv-dev libepoxy-dev gobject-introspection
+  libmpv-dev libepoxy-dev libjson-glib-dev gobject-introspection
 meson setup build -Dmpv=enabled -Dgtk=true -Dtests=true -Dexamples=true \
   -Dintrospection=enabled
 meson compile -C build
@@ -173,7 +187,9 @@ For the advanced separate-window option, install a recent `mpv` binary (0.42+
 with `gpu-next` support), with compatible FFmpeg/libplacebo and native Wayland
 color-management capability. Debian 13's stock mpv may be too old; this optional
 path never silently falls back to older mpv. `GpuNextWindow` does not affect the
-regular library dependency requirements.
+regular library dependency requirements. The Core now requires `json-glib-1.0`
+for the advanced renderer's bounded, typed IPC messages. Install
+`libjson-glib-dev` when building from source.
 
 The build provides `libmajoris-media.so.0`, optional
 `libmajoris-media-gtk4.so.0`, VAPIs, C headers, GIR/typelibs when the compiler
@@ -326,7 +342,7 @@ The native smoke test opens a short PCM WAV; a separate representative generated
 MKV exercises live track/chapter discovery and track/visibility controls.
 Source validation, cancellation and GTK session binding are covered separately.
 See [testing](docs/TESTING.md) and the precise
-[Stage 7.1 verification report](docs/verification-stage7-completion.md). No benchmarks are
+[Stage 7.2 verification report](docs/verification-stage7-final.md). No benchmarks are
 claimed; hardware decoding, 4K, HDR and receiver passthrough need target
 hardware qualification.
 

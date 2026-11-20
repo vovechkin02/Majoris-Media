@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <requires lib="gtk" version="4.0"/>
+  <template class="MediaKitGpuNextControls" parent="GtkBox">
+    <property name="orientation">horizontal</property>
+    <property name="spacing">8</property>
+    <property name="margin-top">8</property>
+    <property name="margin-bottom">8</property>
+    <child>
+      <object class="GtkButton" id="play_button">
+        <property name="icon-name">media-playback-start-symbolic</property>
+        <property name="sensitive">False</property>
+        <property name="tooltip-text">Resume advanced playback</property>
+        <accessibility><property name="label">Resume advanced playback</property></accessibility>
+      </object>
+    </child>
+    <child>
+      <object class="GtkButton" id="pause_button">
+        <property name="icon-name">media-playback-pause-symbolic</property>
+        <property name="sensitive">False</property>
+        <property name="tooltip-text">Pause advanced playback</property>
+        <accessibility><property name="label">Pause advanced playback</property></accessibility>
+      </object>
+    </child>
+    <child>
+      <object class="GtkButton" id="back_button">
+        <property name="label">−10 s</property>
+        <property name="sensitive">False</property>
+        <accessibility><property name="label">Seek back ten seconds</property></accessibility>
+      </object>
+    </child>
+    <child>
+      <object class="GtkButton" id="forward_button">
+        <property name="label">+10 s</property>
+        <property name="sensitive">False</property>
+        <accessibility><property name="label">Seek forward ten seconds</property></accessibility>
+      </object>
+    </child>
+    <child>
+      <object class="GtkButton" id="refresh_button">
+        <property name="icon-name">view-refresh-symbolic</property>
+        <property name="sensitive">False</property>
+        <property name="tooltip-text">Read advanced playback status</property>
+        <accessibility><property name="label">Refresh advanced playback status</property></accessibility>
+      </object>
+    </child>
+    <child>
+      <object class="GtkLabel" id="status_label">
+        <property name="label">Advanced renderer inactive</property>
+        <property name="hexpand">True</property>
+        <property name="xalign">1</property>
+      </object>
+    </child>
+  </template>
+</interface>

@@ -114,3 +114,16 @@ if mpv.found()
     timeout: 15,
   )
 endif
+
+gpu_next_controller_test = executable(
+  'test-gpu-next-controller',
+  'integration/gpu-next-controller.vala',
+  dependencies: [core_api],
+)
+test(
+  'media-gpu-next-ipc-controller',
+  gpu_next_controller_test,
+  args: [meson.current_source_dir() / 'support'],
+  suite: 'integration',
+  timeout: 20,
+)

@@ -493,7 +493,14 @@ private void test_stage7_gpu_next_arguments () {
         assert (args[args.length - 1] == "/tmp/--suspicious.mkv");
         options.color_hint_mode = MediaKit.GpuNextColorHintMode.SOURCE_DYNAMIC;
         args = options.build_arguments ("/usr/bin/mpv", source);
-        assert (args[6] == "--target-colorspace-hint-mode=source-dynamic");
+        assert (args[7] == "--target-colorspace-hint-mode=source-dynamic");
+        assert (args[4] == "--tone-mapping=auto");
+        options.tone_mapping = MediaKit.GpuNextToneMapping.HDR10_PLUS;
+        args = options.build_arguments ("/usr/bin/mpv", source);
+        assert (args[4] == "--tone-mapping=st2094-40");
+        options.tone_mapping = MediaKit.GpuNextToneMapping.DOLBY_VISION;
+        args = options.build_arguments ("/usr/bin/mpv", source);
+        assert (args[4] == "--tone-mapping=st2094-10");
     } catch (Error error) {
         assert_not_reached ();
     }
@@ -530,8 +537,13 @@ private void test_stage7_gpu_next_arguments () {
     }
     assert (rejected);
 
+    var status = new MediaKit.GpuNextPlaybackStatus (
+        true, 1000000, "gpu-next", "bt.2020", "pq"
+    );
+    assert (status.paused && status.position_us == 1000000);
+    assert (status.native_hdr != MediaKit.CapabilityStatus.AVAILABLE);
     var playback = new MediaKit.GpuNextWindow ();
-    assert (!playback.running);
+    assert (!playback.running && !playback.ready);
     playback.close ();
 }
 

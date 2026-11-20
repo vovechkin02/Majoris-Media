@@ -9,6 +9,13 @@ private void test_widget_binding () {
     assert (!view.rendering_information.frame_submitted);
     assert (view.rendering_information.presentation == MediaKit.HdrPresentation.UNVERIFIED);
     assert (controls.session == session);
+    var external = new MediaKit.GpuNextWindow ();
+    var advanced = new MediaKitGtk.GpuNextControls ();
+    advanced.player = external;
+    assert (advanced.player == external);
+    advanced.player = null;
+    assert (advanced.player == null);
+    external.close ();
     view.session = null;
     controls.session = null;
     assert (view.session == null);

@@ -23,6 +23,7 @@ def verify_xml() -> list[str]:
     expected = {
         "ui/media-view.ui": "MediaKitView",
         "ui/media-controls.ui": "MediaKitControls",
+        "ui/gpu-next-controls.ui": "MediaKitGpuNextControls",
     }
     if files != set(expected):
         errors.append("XML resource file list differs from widget templates")

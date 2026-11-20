@@ -7,7 +7,7 @@ gtk_resources = gnome.compile_resources(
 )
 gtk_library = shared_library(
   'majoris-media-gtk4',
-  files('media-view.vala', 'media-controls.vala'),
+  files('media-view.vala', 'media-controls.vala', 'gpu-next-controls.vala'),
   gtk_resources,
   dependencies: [core_api, gtk],
   vala_args: ['--shared-library=libmajoris-media-gtk4.so.0', '--hide-internal'],

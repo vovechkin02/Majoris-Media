@@ -1,4 +1,4 @@
-# Architecture — Stage 7.1 (0.7.1)
+# Architecture — Stage 7.2 (0.7.2)
 
 ## Component and dependency structure
 
@@ -222,3 +222,25 @@ The launcher preflights asynchronously, constructs a fixed argv array with
 terminates the child. Runtime engine readiness, native display HDR and DV
 enhancement-layer correctness are distinct, explicitly reported stages.
 The headless core remains GTK-independent, and the GTK example alone opts in.
+
+## 0.7.2 — process-local IPC and presentation separation
+
+`GpuNextWindow` is a **separate process owner** and façade for the native Wayland
+`gpu-next` renderer, never the owner of a GTK target. `GpuNextIpc` is a private
+adapter that creates a new Unix-domain socket connection per control request;
+it serializes JSON through json-glib, uses a request ID, skips unrelated mpv
+notification events, enforces a finite response/elapsed-time limit, and never
+passes untrusted input to a shell. The private socket resides in a fresh
+mode-0700 directory; the launcher owns and removes it on exit/close.
+
+`GpuNextPlaybackStatus` exposes engine observations with **source** colorimetry,
+not compositor output. `GpuNextControls` is the optional GTK transport for this
+separate process. Its UI is in XML and it owns no GPU decode/presentation
+objects. The original `MediaSession`, `OpenGlOutput`, and `MediaView` retain
+independent lifecycle and ABI contracts. A client must not bind the latter
+widgets to the external player's IPC session.
+
+Pattern roles: the GpuNextWindow is a narrow Facade; GpuNextIpc is an Adapter
+for mpv JSON IPC; native GObject signal `finished` and property `ready` provide
+Observer semantics. No speculative backend factory or GPU render strategy was
+added because the public Linux `gpu-next` embedding API is not yet stable.

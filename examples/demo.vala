@@ -18,6 +18,8 @@ private class DemoApplication : Gtk.Application {
         controls.session = session;
 
         var advanced_window = new MediaKit.GpuNextWindow ();
+        var advanced_controls = new MediaKitGtk.GpuNextControls ();
+        advanced_controls.player = advanced_window;
         var advanced_button = new Gtk.Button.with_label (
             "Advanced video (separate Wayland window)"
         );
@@ -71,6 +73,7 @@ private class DemoApplication : Gtk.Application {
         var layout = new Gtk.Box (Gtk.Orientation.VERTICAL, 0);
         layout.append (open_button);
         layout.append (advanced_button);
+        layout.append (advanced_controls);
         layout.append (view);
         layout.append (controls);
         window.set_child (layout);

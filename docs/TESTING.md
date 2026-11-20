@@ -111,3 +111,20 @@ Vala to run. The example offers a manually invoked external gpu-next window;
 run its separate hardware qualification against native HDR, HDR10+
 scene-hints, and legal Dolby Vision 7 MEL/FEL references. See
 [verification-stage7-completion.md](verification-stage7-completion.md).
+
+## Stage 7.2 separate-renderer controller
+
+`media-gpu-next-ipc-controller` uses a local Python `mpv` process double rather
+than a GPU. It checks the preflight-to-ready handshake, private Unix-domain
+socket permissions, unsolicited JSON event filtering, pause, precise seek,
+source color/VO status, and terminal cleanup. This is a **control-plane** test,
+not a decoder, tone-mapping, FEL reconstruction, or Wayland HDR validation.
+The default Core/GTK smoke cases remain unchanged; do not add duplicate tests
+for every media codec simply to inflate coverage.
+
+The standalone Wayland display qualification gate is separate: check the
+actual installed mpv/FFmpeg/libplacebo versions, compositor protocol and
+HDR-enabled monitor, run reference SDR/HDR10/HLG/HDR10+/DV Profile 5/8/7
+content, compare screenshots and external HDR signaling, and record whether
+HDR output was directly signaled or tone-mapped. Native HDR success cannot be
+inferred from the `GpuNextPlaybackStatus` source transfer field.

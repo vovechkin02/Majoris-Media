@@ -121,3 +121,27 @@ Do not backport the unmerged PR into the default library or use a private
 numeric render parameter without an upstream ABI/ownership contract.
 
 See [Stage 7 completion verification](verification-stage7-completion.md).
+
+## Stage 7.2 control-plane completion (0.7.2)
+
+The external renderer now has a private, actively probed JSON IPC endpoint,
+owner-scoped cleanup, and stable play/pause/absolute-seek/status methods. A
+neutral GTK4 control strip can manage this path separately from the embedded
+`MediaView` playback session. HDR10+ and Dolby Vision metadata-aware tone-map
+algorithms (`st2094-40`, `st2094-10`) are explicit, validated launch options.
+
+The renderer can attempt output through native mpv Wayland `gpu-next` and the
+compositor's color management, but Majoris cannot assert native HDR from the
+presence of a Wayland socket, a 10-bit framebuffer, PQ source metadata, or
+successful `gpu-next` startup. Full HDR10+ dynamic metadata transport and a
+licensed Dolby Vision HDMI output mode are not provided by this generic
+Wayland path. Profile 7 FEL reconstruction is delegated to a suitably built
+mpv/libplacebo/FFmpeg stack and needs reference-picture verification.
+
+**Still blocked:** stable, officially supported `gpu-next` embedding inside a
+caller-owned GTK4 render target. Upstream mpv's Vulkan external-target request
+#18343 was closed as not planned in September 2026, while #16818 remains a
+proposed OpenGL embedding change. Attempting a private ABI or foreign Wayland
+subsurface hack would make the library less reliable. A complete replacement
+would require a substantial independently maintained decoder/render/sync
+pipeline, outside a safe incremental Stage 7 completion.

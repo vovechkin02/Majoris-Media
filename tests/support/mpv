@@ -1,0 +1,103 @@
+#!/usr/bin/env python3
+"""Minimal local JSON-IPC mpv double for process-boundary regression tests.
+
+This is deliberately not a media decoder, renderer, HDR protocol simulator, or
+substitute for display qualification. It tests only the contract at the socket.
+"""
+
+import json
+import os
+import signal
+import socket
+import sys
+
+
+running = True
+
+
+def stop(_signal_number, _frame):
+    """Allow the controller to request ordinary process termination."""
+    global running
+    running = False
+
+
+def respond(command, state):
+    """Implement the small documented property/command subset used by tests."""
+    operation, *arguments = command
+    if operation == "get_property":
+        property_name = arguments[0]
+        if property_name == "pause":
+            return state["pause"]
+        if property_name == "time-pos":
+            return state["time-pos"]
+        if property_name == "current-vo":
+            return "gpu-next"
+        if property_name == "video-params":
+            return {"primaries": "bt.2020", "gamma": "pq"}
+        raise KeyError(property_name)
+    if operation == "set_property" and arguments[0] == "pause":
+        state["pause"] = arguments[1]
+        return None
+    if operation == "seek" and arguments[1] == "absolute+exact":
+        state["time-pos"] = arguments[0]
+        return None
+    raise KeyError(operation)
+
+
+def main(argv):
+    """Run a finite, private Unix-domain mpv command protocol fixture."""
+    if "--version" in argv:
+        print("mpv 0.42.0")
+        return 0
+    socket_arguments = [
+        arg.split("=", 1)[1]
+        for arg in argv
+        if arg.startswith("--input-ipc-server=")
+    ]
+    if len(socket_arguments) != 1:
+        return 2
+    pathname = socket_arguments[0]
+    if os.stat(os.path.dirname(pathname)).st_mode & 0o777 != 0o700:
+        return 3
+    state = {"pause": False, "time-pos": 0.0}
+    signal.signal(signal.SIGTERM, stop)
+    server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    server.settimeout(0.2)
+    try:
+        server.bind(pathname)
+        server.listen(4)
+        while running:
+            try:
+                connection, _address = server.accept()
+            except socket.timeout:
+                continue
+            with connection:
+                data = b""
+                while b"\n" not in data and len(data) < 65536:
+                    chunk = connection.recv(4096)
+                    if not chunk:
+                        break
+                    data += chunk
+                if not data:
+                    continue
+                message = json.loads(data.split(b"\n", 1)[0])
+                request_id = message.get("request_id")
+                try:
+                    result = respond(message["command"], state)
+                    response = {"request_id": request_id, "error": "success", "data": result}
+                except (KeyError, IndexError):
+                    response = {"request_id": request_id, "error": "property unavailable"}
+                # Real mpv may interleave events before the requested response.
+                connection.sendall(b'{"event":"start-file"}\n')
+                connection.sendall(json.dumps(response).encode("utf-8") + b"\n")
+    finally:
+        server.close()
+        try:
+            os.unlink(pathname)
+        except FileNotFoundError:
+            pass
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

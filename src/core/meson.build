@@ -23,6 +23,8 @@ core_sources = files(
   'playback/playback-backend.vala',
   'playback/unavailable-backend.vala',
   'rendering/gpu-next-capabilities.vala',
+  'rendering/gpu-next-ipc.vala',
+  'rendering/gpu-next-playback-status.vala',
   'rendering/gpu-next-launch-options.vala',
   'rendering/gpu-next-probe.vala',
   'rendering/gpu-next-window.vala',
@@ -30,7 +32,7 @@ core_sources = files(
   '../../native/playback/engine.vapi',
 )
 
-core_dependencies = [gio]
+core_dependencies = [gio, json_glib]
 core_c_args = []
 if mpv.found()
   core_dependencies += [mpv, epoxy]
@@ -59,7 +61,7 @@ core_library = shared_library(
 )
 core_api = declare_dependency(
   link_with: core_library,
-  dependencies: [gio],
+  dependencies: [gio, json_glib],
   include_directories: include_directories('.'),
 )
 core_gir_dir = meson.current_build_dir()
@@ -85,6 +87,6 @@ pkg.generate(
   name: 'Majoris Media Core',
   description: 'Reusable headless media API with asynchronous libmpv playback',
   subdirs: 'majoris-media-1',
-  requires: ['gio-2.0'],
+  requires: ['gio-2.0', 'json-glib-1.0'],
 )
 install_data('majoris-media-1.deps', install_dir: get_option('datadir') / 'vala/vapi')

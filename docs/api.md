@@ -1,9 +1,9 @@
-# Public API and operation contracts — Stage 7.1 (0.7.1)
+# Public API and operation contracts — Stage 7.2 (0.7.2)
 
 ## Stability and types
 
 Public namespaces remain `MediaKit-1.0` and `MediaKitGtk-1.0`; SONAME 0 is
-pre-release. Version 0.7.1 is not an ABI-stable production release.
+pre-release. Version 0.7.2 is not an ABI-stable production release.
 
 | Type | Role | Behavior in Stage 5 |
 | --- | --- | --- |
@@ -205,3 +205,35 @@ See `docs/disc-playback.md` for source selection and compatibility constraints.
 The existing `MediaSession`, `OpenGlOutput` and `MediaView` contracts remain
 unchanged. The optional external renderer has independent transport state and
 must not be mistaken for an embedded GTK widget or a validated AV pipeline.
+
+## Stage 7.2 — separate gpu-next transport and status
+
+- `GpuNextWindow.open_async(source, options?, cancellable?)` returns after mpv
+  has accepted its first command on a private, per-player Unix-domain socket,
+  not merely after process spawning. It refuses concurrent opens and closes a
+  partially launched child on failure. `ready` is observable separately from
+  `running`; clients must check `ready` before sending control requests.
+- `GpuNextWindow.set_paused_async(bool, cancellable?)` is an idempotent remote
+  state request. `seek_async(int64 position_us, cancellable?)` sends an absolute
+  accurate seek after rejecting negative targets. Both acknowledge mpv command
+  acceptance, not screen scanout or physical output.
+- `GpuNextWindow.query_status_async(cancellable?)` returns a new immutable
+  `GpuNextPlaybackStatus` with pause state, microsecond position, current VO,
+  **source** primaries/transfer, and `native_hdr=UNVERIFIED`. Missing optional
+  properties are empty or -1, never promoted to an output guarantee.
+- Commands are JSON-encoded, bounded by a five-second per-command watchdog,
+  and sent only over a socket beneath a unique mode-0700 temporary directory.
+  Unsolicited events are skipped until the matching request ID is seen.
+- `GpuNextLaunchOptions.tone_mapping` selects `AUTO`, `HDR10_PLUS` (ST 2094-40)
+  or `DOLBY_VISION` (ST 2094-10). This influences mpv/libplacebo internal tone
+  mapping only; it does **not** transmit dynamic HDR metadata to the display.
+- `MediaKitGtk.GpuNextControls` is a separate neutral XML-backed control
+  widget for this standalone process (pause/resume, ±10 seconds, refresh). It
+  must not be confused with the embedded `MediaControls`/`MediaSession` pair.
+
+### Version/runtime constraints
+
+The compositor and connected monitor must support native HDR negotiation for
+native HDR; detecting BT.2020/PQ source metadata or a gpu-next VO alone proves
+neither native HDR scanout nor Dolby Vision Profile 7 FEL reconstruction.
+The GTK-embedded `MediaView` remains its previous SDR libmpv OpenGL view.
