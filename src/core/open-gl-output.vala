@@ -57,6 +57,21 @@ namespace MediaKit {
             }
         }
 
+        /** Renders PQ pixels only into a validated RGBA16F target using patched gpu-next. */
+        public void render_pq_frame (int width_px, int height_px) throws Error {
+            if (detached) {
+                throw new MediaError.INVALID_ARGUMENT ("OpenGL output is detached");
+            }
+            renderer.render_pq (width_px, height_px);
+            if (needs_sample || sampled_width_px != width_px ||
+                sampled_height_px != height_px) {
+                sampled_width_px = width_px;
+                sampled_height_px = height_px;
+                needs_sample = false;
+                refresh_rendering_information ();
+            }
+        }
+
         /** Forces a new framebuffer measurement when the host reallocates its GL target. */
         public void invalidate_framebuffer () {
             if (!detached) {

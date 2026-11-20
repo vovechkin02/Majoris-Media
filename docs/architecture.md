@@ -89,7 +89,7 @@ only while bound to a session. All subscriptions are disconnected on rebinding.
   OpenGL renderer. This stage does not replace libmpv with `gpu-next`.
 - Native `video-params` changes are observed separately from `track-list` and
   `chapter-list`. A bounded `a{sv}` snapshot captures primitive color tokens,
-  available static HDR luminance, HDR10+ scene peaks and an optional reported
+  available static HDR luminance, scene peaks (not proof of HDR10+) and an optional reported
   Dolby Vision profile. No frame buffers cross into Vala.
 - `VideoColorInformation` classifies metadata, and `MediaSession` emits only
   value-changed snapshots. It must never imply monitor support or complete
@@ -244,3 +244,21 @@ Pattern roles: the GpuNextWindow is a narrow Facade; GpuNextIpc is an Adapter
 for mpv JSON IPC; native GObject signal `finished` and property `ready` provide
 Observer semantics. No speculative backend factory or GPU render strategy was
 added because the public Linux `gpu-next` embedding API is not yet stable.
+
+## Stage 7.5 — OpenGL float attachment integrity
+
+The experimental `HdrMediaView` calls `OpenGlOutput.render_pq_frame()` rather
+than the SDR renderer entry point. Its C adapter verifies the bound RGB16F
+color attachment *before* supplying `GL_RGBA16F` as the libmpv render FBO
+internal format. The per-engine PQ policy cannot be overridden by using the
+wrong public render method. `HdrFrame` owns the temporary FBO and GL texture,
+restores independent draw/read framebuffer state, and transfers the immutable
+BT.2100/PQ-tagged texture to GTK with a GPU fence. Normal SDR paths retain
+identical entry point signatures; no libplacebo or unmerged upstream ABI is
+exposed as a stable public dependency.
+
+This is a strictly *pixel-side* color contract. It does not infer display HDR
+from GTK frame submission or the decoded source's HDR metadata. The upstream
+patched gpu-next embedding remains opt-in and not qualified for standard
+Debian packages; an HDR monitor and reference media are required to establish
+luminance, metadata behavior and full Profile 7 FEL reconstruction.

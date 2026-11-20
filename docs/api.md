@@ -1,4 +1,4 @@
-# Public API and operation contracts — Stage 7.4 (0.7.4)
+# Public API and operation contracts — Stage 7.5 (0.7.5)
 
 ## Stability and types
 
@@ -71,10 +71,13 @@ pre-release. Version 0.7.2 is not an ABI-stable production release.
 - `MediaSession.video_color` starts UNKNOWN and resets when a source is
   replaced/closed. `video_color_changed` fires only for changed values. The
   descriptor records source `primaries`, `transfer`, `matrix`, `color_levels`,
-  `max_cll_nits`, `max_fall_nits`, mastering luminance, HDR10+ scene peak and
-  Dolby Vision profile when libmpv actually exposes them.
-- HDR10 is recognized from PQ transfer; HDR10+ requires *observed* dynamic
-  scene metadata. HLG requires HLG transfer. Dolby Vision requires an observed
+  `max_cll_nits`, `max_fall_nits`, mastering luminance, scene peak (not
+  inherently HDR10+ metadata), and the DV profile when libmpv exposes them.
+- HDR10 is recognized from PQ transfer; HDR10+ classification requires an
+  explicitly confirmed `hdr10plus-metadata-confirmed` boolean in the typed
+  source dictionary. The current libmpv adapter does not supply this key,
+  so ordinary PQ streams remain HDR10 rather than being falsely labeled.
+  The library cannot yet guarantee recognition of HDR10+ dynamic metadata. HLG requires HLG transfer. Dolby Vision requires an observed
   DV profile or Dolby Vision matrix; no brand detection from filename/codec.
   Absent metadata remains UNKNOWN, not SDR by assumption.
 - `color_output_target` is `SDR_BT709_BT1886`, expressing the requested mpv
@@ -285,3 +288,20 @@ remain unchanged. See `docs/verification-stage7-embedded.md`.
 - Native `HdrFrame` is an implementation detail and is not a public VAPI/GIR
   or installable header contract. Source compatibility with released Core and
   default GTK APIs is preserved.
+
+## Stage 7.5 — verified floating-point framebuffer contract
+
+- `OpenGlOutput.render_pq_frame(width_px, height_px)` is distinct from the
+  unchanged SDR `render_current_frame(...)` and is used only by `HdrMediaView`.
+- Native `mediakit_renderer_render_pq()` validates a complete, non-default
+  OpenGL framebuffer with RGB **floating-point** attachment components of at
+  least 16 bits each, and passes `GL_RGBA16F` to libmpv rather than an implicit
+  internal format. It rejects a non-patched renderer or an SDR-configured engine.
+- The original render entry point refuses PQ-configured engines, including
+  when called through a Vala consumer outside `MediaView`.
+- `MediaCapabilities.embedded_gpu_next` is `UNAVAILABLE` on default builds or
+  `UNVERIFIED` when support was compiled in. Only successful, independently
+  qualified rendering could justify `AVAILABLE`.
+- The GTK bridge restores draw and read framebuffer bindings independently,
+  fails on GPU allocation or synchronization errors, and retains its previous
+  public widget API. No success here implies native HDR display output.

@@ -1,6 +1,6 @@
 # Majoris Media
 
-**Version:** 0.7.4 (Stage 7 optional color-tagged PQ GTK video path) · **API namespaces:** `MediaKit-1.0`,
+**Version:** 0.7.5 (Stage 7 HDR framebuffer contract and metadata correction) · **API namespaces:** `MediaKit-1.0`,
 `MediaKitGtk-1.0` · **Platform:** Majoris OS / Debian 13 · **License:** GPL-3.0-or-later
 
 Majoris Media is a reusable audio/video playback foundation for Majoris applications.
@@ -10,7 +10,7 @@ libmpv, and a **GtkGLArea**-attached OpenGL renderer. Applications retain owners
 windows, playlists, toolbars, persistent settings, and fullscreen policy.
 
 > **Verification status:** This is source implementation, not a validated release.
-> Stage 7.4 static checks passed, but Vala, Meson, libmpv and GTK4 development
+> Stage 7.5 static checks passed, but Vala, Meson, libmpv and GTK4 development
 > packages were unavailable in the authoring environment. Native compilation,
 > runtime playback, GTK rendering, ICC processing and hardware output are
 > **not verified**.
@@ -47,12 +47,12 @@ windows, playlists, toolbars, persistent settings, and fullscreen policy.
 | Chapter navigation | Indexed chapters and actual current chapter observation |
 | Buffering and seek state | Cache pause, percentage, seeking and engine events |
 | Video decoder status | Observed `hwdec-current`, including software fallback |
-| Source color metadata | Live `VideoColorInformation`: transfer, primaries, range, matrix, HDR flags, luminance and DV profile when available |
+| Source color metadata | Live `VideoColorInformation`: transfer, primaries, range, matrix, luminance, DV profile; no HDR10+ assertion from scene peak alone |
 | Embedded video target | SDR BT.709/BT.1886 processing, configurable legacy-compatible tone mapping |
 | Renderer quality | Opt-in bounded debanding, default balanced |
 | Framebuffer telemetry | GL RGB bit depth and render dithering depth measured on active framebuffer; no HDR output inference |
 | Embedded gpu-next | Default: stable legacy OpenGL. Optional patched-libmpv draft backend is strictly opt-in; unverified native HDR |
-| Optional HDR GTK texture view | Opt-in `HdrMediaView` renders float OpenGL frames as GDK BT.2100/PQ textures, requiring patched libmpv; monitor HDR still unverified |
+| Optional HDR GTK texture view | Opt-in `HdrMediaView` verifies RGB16F attachments, passes GL_RGBA16F to patched libmpv, and submits BT.2100/PQ textures; monitor HDR remains unverified |
 | Standalone gpu-next Wayland | Optional separately windowed mpv 0.42+ process, private JSON IPC, ready-state handshake, pause/seek/query and cleanup; not embedded into GTK |
 | Advanced display negotiation | mpv native Wayland `gpu-next`, source/target hint modes, ST 2094-40 / ST 2094-10 internal tone maps; actual output must be tested |
 | GPU-next FEL reconstruction | Upstream renderer can attempt it; not proven by executable version or this library |
@@ -100,6 +100,15 @@ it to `HdrMediaView`. The native engine then requests BT.2020/PQ output, and
 `PREFER_NATIVE` policy continues to reject unverified native HDR requests.
 The new widget reports `pq_texture_submitted` only for a completed color-tagged
 frame; its `presentation` remains **UNVERIFIED**, not `NATIVE_HDR`.
+
+Stage 7.5 additionally validates the bound floating-point color attachment
+before rendering and passes `GL_RGBA16F` to the patched libmpv API. The ordinary
+SDR output still has its original entry point and bit-depth handling. Backend
+and playback policy checks prevent using the untagged SDR render call for a
+PQ-configured source. GPU allocation, synchronization and context failures now
+fail closed, and failed rendering clears any retained texture rather than
+presenting a stale frame. HDR10+ classification no longer infers dynamic
+metadata from scene peak alone. See [verification 7.5](docs/verification-stage7-precision.md).
 
 This stage **does not** prove native HDR scanout, Dolby Vision Profile 7 FEL
 accuracy, or display-link HDR10+ dynamic metadata signaling. Compositor,

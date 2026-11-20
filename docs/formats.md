@@ -29,7 +29,9 @@ security policy. Commercial disc decryption is not supplied by this library.
 
 Stage 4 reads `video-params` and available DV profile properties from libmpv,
 exposing source colorimetry in `VideoColorInformation`. HDR10 (PQ), HLG and
-HDR10+ scene-max values are classified only when observed; Dolby Vision
+scene-maximum values are captured separately and do **not** establish HDR10+.
+HDR10+ classification requires an authoritative dynamic-metadata indicator,
+which the current libmpv source adapter does not expose. Dolby Vision
 requires metadata/profiles from the engine. Support depends on libmpv version
 and actual decoded stream metadata, not on file-extension recognition.
 

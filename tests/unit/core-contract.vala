@@ -175,8 +175,15 @@ private void test_stage4_color_classification () {
     dynamic_fields.add ("{sv}", "scene-max-r", new Variant.double (1100.0));
     dynamic_fields.add ("{sv}", "scene-max-g", new Variant.double (900.0));
     var dynamic = MediaKit.VideoColorInformation.from_metadata (dynamic_fields.end ());
-    assert (dynamic.hdr_format == MediaKit.HdrFormat.HDR10_PLUS);
+    assert (dynamic.hdr_format == MediaKit.HdrFormat.HDR10);
     assert (dynamic.scene_peak_nits == 1100.0);
+
+    /* An authoritative boolean, not an inferred scene peak, is required. */
+    var confirmed_fields = new VariantBuilder (new VariantType ("a{sv}"));
+    confirmed_fields.add ("{sv}", "gamma", new Variant.string ("pq"));
+    confirmed_fields.add ("{sv}", "hdr10plus-metadata-confirmed", new Variant.boolean (true));
+    var confirmed = MediaKit.VideoColorInformation.from_metadata (confirmed_fields.end ());
+    assert (confirmed.hdr_format == MediaKit.HdrFormat.HDR10_PLUS);
 
     var hlg_fields = new VariantBuilder (new VariantType ("a{sv}"));
     hlg_fields.add ("{sv}", "gamma", new Variant.string ("hlg"));
@@ -447,7 +454,7 @@ private void test_stage7_video_policies () {
     assert (options.tone_mapping == MediaKit.ToneMappingAlgorithm.BT2390);
     assert (options.video_quality == MediaKit.VideoQualityPolicy.HIGH_QUALITY);
     var session = new MediaKit.MediaSession (options);
-    assert (session.capabilities.embedded_gpu_next == MediaKit.CapabilityStatus.UNAVAILABLE);
+    assert (session.capabilities.embedded_gpu_next != MediaKit.CapabilityStatus.AVAILABLE);
     assert (session.capabilities.dolby_vision_fel == MediaKit.CapabilityStatus.UNVERIFIED);
     assert (session.capabilities.native_hdr != MediaKit.CapabilityStatus.AVAILABLE);
     assert (session.color_output_target == MediaKit.ColorOutputTarget.SDR_BT709_BT1886);

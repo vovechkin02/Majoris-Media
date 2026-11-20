@@ -146,6 +146,9 @@ namespace MediaKitNative {
         /** Draws a video frame into the current framebuffer. */
         public bool render (int width_px, int height_px) throws GLib.Error;
 
+        /** Fails closed unless the bound color attachment is RGBA16F and gpu-next. */
+        public bool render_pq (int width_px, int height_px) throws GLib.Error;
+
         /** Applies a validated host-provided display ICC profile on its GL thread. */
         public bool set_icc_profile (GLib.Bytes? profile) throws GLib.Error;
 

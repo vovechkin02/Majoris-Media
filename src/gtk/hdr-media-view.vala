@@ -130,7 +130,7 @@ namespace MediaKitGtk {
                         gl_context.make_current ();
                         frame_bridge.begin (width_px, height_px);
                         try {
-                            output.render_current_frame (width_px, height_px);
+                            output.render_pq_frame (width_px, height_px);
                             var completed = frame_bridge.finish ();
                             last_texture = completed;
                             needs_frame = false;
@@ -219,6 +219,8 @@ namespace MediaKitGtk {
         private void report_failure (string message) {
             if (!render_failed) {
                 render_failed = true;
+                last_texture = null;
+                pq_texture_submitted = false;
                 warning ("Experimental HDR rendering failed: %s", message);
                 rendering_failed (message);
             }

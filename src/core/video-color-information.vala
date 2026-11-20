@@ -29,7 +29,7 @@ namespace MediaKit {
         /** Source mastering maximum luminance in cd/m², zero when unknown. */
         public double mastering_max_nits { get; construct; default = 0.0; }
 
-        /** Observed HDR10+ scene peak in cd/m², zero when not supplied. */
+        /** Observed scene peak in cd/m²; not evidence of HDR10+ metadata. */
         public double scene_peak_nits { get; construct; default = 0.0; }
 
         /** Dolby Vision profile when identified by the engine; zero otherwise. */
@@ -81,7 +81,11 @@ namespace MediaKit {
             } else if (transfer == "hlg") {
                 format = HdrFormat.HLG;
             } else if (transfer == "pq") {
-                format = scene_peak > 0 ? HdrFormat.HDR10_PLUS : HdrFormat.HDR10;
+                /* Scene peaks can originate from static mastering metadata or
+                 * analysis; only an explicit, trusted dynamic-metadata signal
+                 * is sufficient to classify the source as HDR10+. */
+                format = read_bool (metadata, "hdr10plus-metadata-confirmed")
+                    ? HdrFormat.HDR10_PLUS : HdrFormat.HDR10;
             } else if (transfer != "" && transfer != "unknown") {
                 format = HdrFormat.SDR;
             }
@@ -123,6 +127,12 @@ namespace MediaKit {
         private static string read_string (Variant data, string key) {
             var value = data.lookup_value (key, new VariantType ("s"));
             return value == null ? "" : value.get_string ();
+        }
+
+        /** Returns true only for an explicit boolean source-metadata signal. */
+        private static bool read_bool (Variant data, string key) {
+            var value = data.lookup_value (key, new VariantType ("b"));
+            return value != null && value.get_boolean ();
         }
 
         /** Reads numeric metadata without converting NaN, negative, or absent values. */

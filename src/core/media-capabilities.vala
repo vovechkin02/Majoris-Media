@@ -17,21 +17,22 @@ namespace MediaKit {
         /** Verified HDR presentation path, independent of source metadata. */
         public HdrPresentation hdr_presentation { get; construct; }
 
-        /** Embedded gpu-next/libplacebo output is not available in this adapter. */
+        /** Embedded gpu-next compiled support, not proof of actual GL initialization. */
         public CapabilityStatus embedded_gpu_next { get; construct; }
 
         /** No validated full Profile 7 FEL reconstruction exists for this GTK renderer. */
         public CapabilityStatus dolby_vision_fel { get; construct; }
 
         /** Creates a conservative snapshot without claiming untested output support. */
-        public MediaCapabilities (CapabilityStatus playback_engine = CapabilityStatus.UNKNOWN) {
+        public MediaCapabilities (CapabilityStatus playback_engine = CapabilityStatus.UNKNOWN,
+                                  CapabilityStatus embedded_backend = CapabilityStatus.UNAVAILABLE) {
             Object (
                 playback_engine: playback_engine,
                 video_decoding: CapabilityStatus.UNKNOWN,
                 native_hdr: CapabilityStatus.UNVERIFIED,
                 encoded_audio: CapabilityStatus.UNVERIFIED,
                 hdr_presentation: HdrPresentation.UNVERIFIED,
-                embedded_gpu_next: CapabilityStatus.UNAVAILABLE,
+                embedded_gpu_next: embedded_backend,
                 dolby_vision_fel: CapabilityStatus.UNVERIFIED
             );
         }

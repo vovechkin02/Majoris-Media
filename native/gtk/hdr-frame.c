@@ -10,6 +10,7 @@ struct _MediaKitHdrFrame {
     GLuint texture;
     GLuint framebuffer;
     GLint previous_framebuffer;
+    GLint previous_read_framebuffer;
     GLint previous_viewport[4];
     gint width_px;
     gint height_px;
@@ -69,11 +70,25 @@ mediakit_hdr_frame_begin(MediaKitHdrFrame *self, gint width_px,
                             "The HDR GL context could not be made current");
         return FALSE;
     }
+    /* Respect both READ and DRAW framebuffer bindings; they may differ in GTK. */
     GLint previous_texture = 0;
-    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &self->previous_framebuffer);
+    GLint maximum_texture_size = 0;
+    glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maximum_texture_size);
+    if (width_px > maximum_texture_size || height_px > maximum_texture_size) {
+        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED,
+                            "HDR frame exceeds the GPU's maximum texture dimension");
+        return FALSE;
+    }
+    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &self->previous_framebuffer);
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &self->previous_read_framebuffer);
     glGetIntegerv(GL_VIEWPORT, self->previous_viewport);
     glGetIntegerv(GL_TEXTURE_BINDING_2D, &previous_texture);
     glGenTextures(1, &self->texture);
+    if (self->texture == 0) {
+        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NO_SPACE,
+                            "Unable to allocate an HDR texture");
+        return FALSE;
+    }
     glBindTexture(GL_TEXTURE_2D, self->texture);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -81,8 +96,21 @@ mediakit_hdr_frame_begin(MediaKitHdrFrame *self, gint width_px,
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, width_px, height_px,
                  0, GL_RGBA, GL_HALF_FLOAT, NULL);
+    GLenum texture_error = glGetError();
     glBindTexture(GL_TEXTURE_2D, (GLuint) previous_texture);
+    if (texture_error != GL_NO_ERROR) {
+        mediakit_hdr_frame_abort(self);
+        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NO_SPACE,
+                            "The GPU rejected the RGBA16F texture allocation");
+        return FALSE;
+    }
     glGenFramebuffers(1, &self->framebuffer);
+    if (self->framebuffer == 0) {
+        mediakit_hdr_frame_abort(self);
+        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_FAILED,
+                            "Unable to allocate the HDR framebuffer");
+        return FALSE;
+    }
     glBindFramebuffer(GL_FRAMEBUFFER, self->framebuffer);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
                            GL_TEXTURE_2D, self->texture, 0);
@@ -111,8 +139,15 @@ mediakit_hdr_frame_finish(MediaKitHdrFrame *self, GError **error)
     /* GTK may sample this texture from another shared GL context. An explicit
      * fence accompanies the image so GTK can synchronize without glFinish. */
     GLsync sync = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+    if (sync == NULL) {
+        mediakit_hdr_frame_abort(self);
+        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_FAILED,
+                            "GPU synchronization unavailable for HDR texture sharing");
+        return NULL;
+    }
     glFlush();
-    glBindFramebuffer(GL_FRAMEBUFFER, self->previous_framebuffer);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, self->previous_framebuffer);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, self->previous_read_framebuffer);
     glViewport(self->previous_viewport[0], self->previous_viewport[1],
                self->previous_viewport[2], self->previous_viewport[3]);
     glDeleteFramebuffers(1, &self->framebuffer);
@@ -138,6 +173,11 @@ mediakit_hdr_frame_finish(MediaKitHdrFrame *self, GError **error)
     GdkTexture *texture = gdk_gl_texture_builder_build(
         builder, retired_texture_destroy, retired);
     g_object_unref(builder);
+    if (texture == NULL) {
+        retired_texture_destroy(retired);
+        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_FAILED,
+                            "GTK rejected the color-tagged HDR texture");
+    }
     return texture;
 }
 
@@ -151,7 +191,8 @@ mediakit_hdr_frame_abort(MediaKitHdrFrame *self)
     }
     gdk_gl_context_make_current(self->context);
     if (gdk_gl_context_get_current() == self->context) {
-        glBindFramebuffer(GL_FRAMEBUFFER, self->previous_framebuffer);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, self->previous_framebuffer);
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, self->previous_read_framebuffer);
         glViewport(self->previous_viewport[0], self->previous_viewport[1],
                    self->previous_viewport[2], self->previous_viewport[3]);
         if (self->framebuffer != 0) {

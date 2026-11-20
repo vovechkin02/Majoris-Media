@@ -327,6 +327,22 @@ gboolean mediakit_renderer_render(MediaKitRenderer *self,
                                   gint height_px,
                                   GError **error);
 
+/** mediakit_renderer_render_pq:
+ * @self: Experimental patched gpu-next renderer on its owning GL context.
+ * @width_px: Width of a bound RGBA16F framebuffer.
+ * @height_px: Height of a bound RGBA16F framebuffer.
+ * @error: (out) (optional): Incompatible target or engine rendering failure.
+ *
+ * Fails unless the bound color attachment has verified 16-bit floating-point
+ * RGB components. Sends GL_RGBA16F to libmpv; color tagging and display HDR
+ * negotiation remain the caller's separate responsibilities.
+ * Returns: TRUE only after a successful render into the float target.
+ */
+gboolean mediakit_renderer_render_pq(MediaKitRenderer *self,
+                                     gint width_px,
+                                     gint height_px,
+                                     GError **error);
+
 /** mediakit_renderer_set_icc_profile:
  * @self: Current GL-thread renderer.
  * @profile: (nullable): Complete ICC profile blob, or NULL to clear it.

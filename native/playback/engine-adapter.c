@@ -48,6 +48,7 @@ struct _MediaKitEngine {
     gboolean closing;
     gboolean disc_source;
     gboolean disc_menu_supported;
+    gboolean pq_output_requested;
 #ifdef MEDIAKIT_HAVE_MPV
     mpv_handle *player;
 #endif
@@ -486,6 +487,7 @@ mediakit_engine_new_with_video_target(const gchar *device_id, const gchar *codec
                                       gboolean experimental_pq)
 {
     MediaKitEngine *self = g_object_new(MEDIAKIT_TYPE_ENGINE, NULL);
+    self->pq_output_requested = experimental_pq;
 #ifdef MEDIAKIT_HAVE_MPV
     int status;
     self->player = mpv_create();
@@ -1487,7 +1489,8 @@ create_renderer_with_mode(MediaKitEngine *self, gboolean experimental, GError **
         params[2] = (mpv_render_param){ MPV_RENDER_PARAM_BACKEND, (void *)"gpu-next" };
 #else
         g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED,
-                            "Experimental embedded gpu-next was not built; use the supported OpenGL renderer or the separate Wayland player");
+                            "Experimental embedded gpu-next was not built; "
+                            "use the standard OpenGL renderer or the Wayland player");
         return NULL;
 #endif
     }
@@ -1672,28 +1675,85 @@ mediakit_renderer_invalidate_framebuffer(MediaKitRenderer *self)
     self->framebuffer_information_valid = FALSE;
 }
 
-/** Draws into a GTK GLArea-owned framebuffer without CPU frame copies. */
-gboolean
-mediakit_renderer_render(MediaKitRenderer *self,
-                         gint width_px,
-                         gint height_px,
-                         GError **error)
+#ifdef MEDIAKIT_HAVE_MPV
+/** Validates the attached floating-point color buffer without trusting its label. */
+static gboolean
+validate_pq_framebuffer(MediaKitRenderer *self, GLint framebuffer, GError **error)
 {
+    if (framebuffer == 0 || glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER) !=
+                            GL_FRAMEBUFFER_COMPLETE) {
+        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED,
+                            "PQ output requires a complete non-default framebuffer");
+        return FALSE;
+    }
+    GLint component_type = 0;
+    GLint red_bits = 0;
+    GLint green_bits = 0;
+    GLint blue_bits = 0;
+    glGetFramebufferAttachmentParameteriv(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                                           GL_FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE,
+                                           &component_type);
+    glGetFramebufferAttachmentParameteriv(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                                           GL_FRAMEBUFFER_ATTACHMENT_RED_SIZE, &red_bits);
+    glGetFramebufferAttachmentParameteriv(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                                           GL_FRAMEBUFFER_ATTACHMENT_GREEN_SIZE, &green_bits);
+    glGetFramebufferAttachmentParameteriv(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                                           GL_FRAMEBUFFER_ATTACHMENT_BLUE_SIZE, &blue_bits);
+    if (glGetError() != GL_NO_ERROR || component_type != GL_FLOAT ||
+        red_bits < 16 || green_bits < 16 || blue_bits < 16) {
+        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED,
+                            "PQ output requires a verified RGB16F color attachment");
+        return FALSE;
+    }
+    self->red_bits = red_bits;
+    self->green_bits = green_bits;
+    self->blue_bits = blue_bits;
+    self->last_framebuffer = framebuffer;
+    self->framebuffer_information_valid = TRUE;
+    return TRUE;
+}
+#endif
+
+/** Renders into the current framebuffer with a strictly selected color contract. */
+static gboolean
+render_with_target(MediaKitRenderer *self, gint width_px, gint height_px,
+                   gboolean pq_target, GError **error)
+{
+    g_return_val_if_fail(MEDIAKIT_IS_RENDERER(self), FALSE);
     if (self->released || width_px <= 0 || height_px <= 0) {
         g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT,
                             "Renderer is detached or its framebuffer size is invalid");
         return FALSE;
     }
 #ifdef MEDIAKIT_HAVE_MPV
+    if (self->render_context == NULL) {
+        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NOT_INITIALIZED,
+                            "No active libmpv render context");
+        return FALSE;
+    }
+    if (pq_target && (!self->experimental_gpu_next || self->engine == NULL ||
+                      !self->engine->pq_output_requested)) {
+        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED,
+                            "PQ output requires the patched renderer and PQ-configured engine");
+        return FALSE;
+    }
+    if (!pq_target && self->engine != NULL &&
+        self->engine->pq_output_requested) {
+        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED,
+                            "PQ pixels must use render_pq and a tagged float texture");
+        return FALSE;
+    }
     GLint framebuffer = 0;
     int flip_y = 1;
     int depth = 8;
     mpv_opengl_fbo fbo;
     mpv_render_param params[4];
     int status;
-    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &framebuffer);
-    /* A bound framebuffer is queried once per allocation, not per video
-     * frame. GTK resize and ICC changes explicitly invalidate the snapshot. */
+    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &framebuffer);
+    if (pq_target && !validate_pq_framebuffer(self, framebuffer, error)) {
+        return FALSE;
+    }
+    /* Query the channel precision only after a target change or invalidation. */
     if (!self->framebuffer_information_valid || self->last_framebuffer != framebuffer) {
         GLint red_bits = 0;
         GLint green_bits = 0;
@@ -1710,10 +1770,17 @@ mediakit_renderer_render(MediaKitRenderer *self,
     if (self->red_bits > 0 && self->green_bits > 0 && self->blue_bits > 0) {
         depth = MIN(self->red_bits, MIN(self->green_bits, self->blue_bits));
     }
+    if (pq_target && depth < 16) {
+        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED,
+                            "PQ framebuffer bit depth is insufficient");
+        return FALSE;
+    }
     fbo.fbo = framebuffer;
     fbo.w = width_px;
     fbo.h = height_px;
-    fbo.internal_format = 0;
+    /* Zero preserves the stable GtkGLArea path. HDR passes its *actual*
+     * float attachment format instead of relying on libmpv's default. */
+    fbo.internal_format = pq_target ? GL_RGBA16F : 0;
     params[0] = (mpv_render_param){ MPV_RENDER_PARAM_OPENGL_FBO, &fbo };
     params[1] = (mpv_render_param){ MPV_RENDER_PARAM_FLIP_Y, &flip_y };
     params[2] = (mpv_render_param){ MPV_RENDER_PARAM_DEPTH, &depth };
@@ -1732,4 +1799,20 @@ mediakit_renderer_render(MediaKitRenderer *self,
                         mediakit_engine_unavailable_reason());
     return FALSE;
 #endif
+}
+
+/** Preserves the original stable SDR render contract and C ABI. */
+gboolean
+mediakit_renderer_render(MediaKitRenderer *self, gint width_px,
+                         gint height_px, GError **error)
+{
+    return render_with_target(self, width_px, height_px, FALSE, error);
+}
+
+/** Uses only a verified RGBA16F target and the experimental gpu-next context. */
+gboolean
+mediakit_renderer_render_pq(MediaKitRenderer *self, gint width_px,
+                            gint height_px, GError **error)
+{
+    return render_with_target(self, width_px, height_px, TRUE, error);
 }

@@ -141,3 +141,18 @@ inferred from the `GpuNextPlaybackStatus` source transfer field.
 - Hardware colorimetry, Wayland HDR mode, compositor conversion, 4K frame
   performance, HDR10+ metadata and Dolby Vision Profile 7 FEL reproduction
   remain independently required before any product support claim.
+
+## Stage 7.5 framebuffer and HDR metadata corrections
+
+The Core classification test now verifies that HDR10 scene peak metadata
+alone does **not** imply HDR10+; only a synthetic explicit confirmed dynamic
+metadata signal may select the HDR10+ enum. The same suite checks that patched
+embedded gpu-next is not marked `AVAILABLE` solely from compile-time support.
+
+The opt-in patched runtime must test both float-frame rendering success and
+failure: RGB16F, an eight-bit FBO, missing GLsync, resize, source replacement,
+reparenting, and GTK renderer teardown. In particular the raw `render_pq`
+operation must fail on an SDR-configured engine, and the ordinary `render`
+operation must reject a PQ-configured engine. These tests require working GL
+and patched libmpv, not this source-only authoring environment. Do not count
+source-code inspection as proof that GTK, Mutter and the monitor support HDR.

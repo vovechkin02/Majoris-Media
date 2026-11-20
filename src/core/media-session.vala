@@ -196,7 +196,9 @@ namespace MediaKit {
             attach_backend ();
             capabilities = new MediaCapabilities (
                 native_engine_is_available ()
-                    ? CapabilityStatus.AVAILABLE : CapabilityStatus.UNAVAILABLE
+                    ? CapabilityStatus.AVAILABLE : CapabilityStatus.UNAVAILABLE,
+                supports_experimental_gpu_next_embedding ()
+                    ? CapabilityStatus.UNVERIFIED : CapabilityStatus.UNAVAILABLE
             );
         }
 
