@@ -1,9 +1,9 @@
-# Public API and operation contracts — Stage 6 (0.6.0)
+# Public API and operation contracts — Stage 7 (0.7.0)
 
 ## Stability and types
 
 Public namespaces remain `MediaKit-1.0` and `MediaKitGtk-1.0`; SONAME 0 is
-pre-release. Version 0.6.0 is not an ABI-stable production release.
+pre-release. Version 0.7.0 is not an ABI-stable production release.
 
 | Type | Role | Behavior in Stage 5 |
 | --- | --- | --- |
@@ -165,3 +165,20 @@ and the DVD equivalent explicitly identify an optical-disc source or ISO. The
 required native menu support is not present.
 
 See `docs/disc-playback.md` for source selection and compatibility constraints.
+
+## Stage 7 video presentation
+
+- `PlaybackOptions.tone_mapping`: `ToneMappingAlgorithm` (`AUTO`, `BT2390`,
+  `MOBIUS`, `HABLE`), applied to the *next* engine instance.
+- `PlaybackOptions.video_quality`: `VideoQualityPolicy` (`BALANCED`,
+  `HIGH_QUALITY`); high quality selects bounded debanding before engine init.
+- `OpenGlOutput.rendering_information`: cached renderer-local framebuffer
+  and ICC status, refreshed only after a draw, resize or ICC update.
+- `OpenGlOutput.invalidate_framebuffer()`: explicit cache invalidation for a
+  host replacing its bound GL target without changing dimensions.
+- `MediaKitGtk.MediaView.rendering_information`: matching GTK-facing snapshot.
+  `rendering_information_changed` notifies consumers of actual changes.
+- `VideoRenderingInformation.has_ten_bit_framebuffer`: RGB bits only; **never**
+  infer monitor HDR, compositor output, `gpu-next` or Dolby Vision FEL.
+- `MediaCapabilities.embedded_gpu_next` is `UNAVAILABLE` for this release;
+  native HDR and Dolby Vision FEL remain unverified.

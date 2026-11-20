@@ -63,10 +63,12 @@ namespace MediaKit {
         private bool closed = false;
 
         /** Creates a per-request native engine to isolate superseded load completions. */
-        public MpvBackend (PlaybackOptions options) {
-            engine = new MediaKitNative.Engine.with_audio (
+        public MpvBackend (PlaybackOptions options) throws Error {
+            engine = new MediaKitNative.Engine.with_audio_and_video (
                 options.audio_device_id, AudioPolicy.codecs_for_engine (options),
-                AudioPolicy.pcm_channels_for_engine (options)
+                AudioPolicy.pcm_channels_for_engine (options),
+                VideoRenderingPolicy.tone_mapping_option (options.tone_mapping),
+                VideoRenderingPolicy.should_deband (options.video_quality)
             );
             weak MpvBackend weak_self = this;
             handlers += engine.ended.connect (() => {

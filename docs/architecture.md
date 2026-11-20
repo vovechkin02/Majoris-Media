@@ -1,4 +1,4 @@
-# Architecture — Stage 6 (0.6.0)
+# Architecture — Stage 7 (0.7.0)
 
 ## Component and dependency structure
 
@@ -193,3 +193,16 @@ into the `dvd://` or `bd://` playback URL. GTK UI adds only optional title/menu
 selectors and focus-aware key routing. No extra decoder or navigation framework
 is introduced. All native metadata allocations and callbacks retain the
 existing per-session ownership and cancellation rules.
+
+## Stage 7 renderer and capability seam
+
+Bounded `VideoRenderingPolicy` validation occurs before engine creation.
+The native engine constructor consumes fixed mpv-compatible color options;
+the preexisting audio-only constructor remains ABI-compatible. Renderer-local
+`VideoRenderingInformation` samples GL color channel sizes, render depth and
+ICC state without calling GTK from Core. These snapshots are cached and only
+updated after renderer creation, ICC changes, and framebuffer resizing. The
+GTK wrapper simply observes them through GObject signals. The embedded
+`gpu-next` and native HDR routes remain intentionally unavailable until
+an upstream-supported API and Wayland compositor contract can be qualified.
+See [advanced rendering](advanced-rendering.md).

@@ -59,6 +59,14 @@ struct _MediaKitRenderer {
     GMainContext *context;
     gboolean released;
     gint pending_renderer_dispatch;
+    gint red_bits;
+    gint green_bits;
+    gint blue_bits;
+    gint render_depth_bits;
+    gboolean icc_profile_active;
+    gboolean frame_submitted;
+    gboolean framebuffer_information_valid;
+    gint last_framebuffer;
 #ifdef MEDIAKIT_HAVE_MPV
     mpv_render_context *render_context;
 #endif
@@ -469,10 +477,11 @@ mediakit_engine_class_init(MediaKitEngineClass *klass)
         0, NULL, NULL, NULL, G_TYPE_NONE, 0);
 }
 
-/** Allocates and initializes libmpv with a fixed audio policy before any media loads. */
+/** Allocates a playback engine with independently selected audio and SDR video policies. */
 MediaKitEngine *
-mediakit_engine_new_with_audio(const gchar *device_id, const gchar *codecs,
-                                const gchar *pcm_channels)
+mediakit_engine_new_with_audio_and_video(const gchar *device_id, const gchar *codecs,
+                                         const gchar *pcm_channels,
+                                         const gchar *tone_mapping, gboolean deband)
 {
     MediaKitEngine *self = g_object_new(MEDIAKIT_TYPE_ENGINE, NULL);
 #ifdef MEDIAKIT_HAVE_MPV
@@ -513,6 +522,15 @@ mediakit_engine_new_with_audio(const gchar *device_id, const gchar *codecs,
     if (status >= 0) {
         status = mpv_set_option_string(self->player, "icc-profile-auto", "yes");
     }
+    /* The embedded libmpv GL backend does not expose gpu-next HDR scanout or
+     * full Dolby Vision Profile 7 FEL rendering. Use only supported SDR options. */
+    if (status >= 0) {
+        status = mpv_set_option_string(self->player, "tone-mapping",
+                                       tone_mapping != NULL ? tone_mapping : "auto");
+    }
+    if (status >= 0) {
+        status = mpv_set_option_string(self->player, "deband", deband ? "yes" : "no");
+    }
     if (status >= 0) {
         status = mpv_initialize(self->player);
     }
@@ -547,6 +565,15 @@ mediakit_engine_new_with_audio(const gchar *device_id, const gchar *codecs,
     mpv_set_wakeup_callback(self->player, on_mpv_wakeup, self);
 #endif
     return self;
+}
+
+/** Preserves the original audio-only constructor and its default SDR behavior. */
+MediaKitEngine *
+mediakit_engine_new_with_audio(const gchar *device_id, const gchar *codecs,
+                                const gchar *pcm_channels)
+{
+    return mediakit_engine_new_with_audio_and_video(device_id, codecs, pcm_channels,
+                                                   "auto", FALSE);
 }
 
 /** Maintains the pre-Stage-5 engine construction ABI with safe PCM defaults. */
@@ -1530,12 +1557,50 @@ mediakit_renderer_set_icc_profile(MediaKitRenderer *self, GBytes *profile, GErro
         set_mpv_error(error, status, "Unable to configure display ICC profile");
         return FALSE;
     }
+    self->icc_profile_active = profile != NULL;
     return TRUE;
 #else
     g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED,
                         mediakit_engine_unavailable_reason());
     return FALSE;
 #endif
+}
+
+/** Reports measured framebuffer precision without inferring actual HDR display output. */
+GVariant *
+mediakit_renderer_get_output_information(MediaKitRenderer *self)
+{
+    GVariantBuilder builder;
+    g_return_val_if_fail(MEDIAKIT_IS_RENDERER(self), NULL);
+
+    g_variant_builder_init(&builder, G_VARIANT_TYPE_VARDICT);
+    if (!self->released) {
+#ifdef MEDIAKIT_HAVE_MPV
+        g_variant_builder_add(&builder, "{sv}", "backend",
+                              g_variant_new_string("libmpv-opengl"));
+#endif
+        g_variant_builder_add(&builder, "{sv}", "red-bits",
+                              g_variant_new_int32(self->red_bits));
+        g_variant_builder_add(&builder, "{sv}", "green-bits",
+                              g_variant_new_int32(self->green_bits));
+        g_variant_builder_add(&builder, "{sv}", "blue-bits",
+                              g_variant_new_int32(self->blue_bits));
+        g_variant_builder_add(&builder, "{sv}", "render-depth-bits",
+                              g_variant_new_int32(self->render_depth_bits));
+        g_variant_builder_add(&builder, "{sv}", "icc-active",
+                              g_variant_new_boolean(self->icc_profile_active));
+        g_variant_builder_add(&builder, "{sv}", "frame-submitted",
+                              g_variant_new_boolean(self->frame_submitted));
+    }
+    return g_variant_ref_sink(g_variant_builder_end(&builder));
+}
+
+/** Invalidates bound-framebuffer metadata after a host reallocates GL buffers. */
+void
+mediakit_renderer_invalidate_framebuffer(MediaKitRenderer *self)
+{
+    g_return_if_fail(MEDIAKIT_IS_RENDERER(self));
+    self->framebuffer_information_valid = FALSE;
 }
 
 /** Draws into a GTK GLArea-owned framebuffer without CPU frame copies. */
@@ -1558,6 +1623,24 @@ mediakit_renderer_render(MediaKitRenderer *self,
     mpv_render_param params[4];
     int status;
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &framebuffer);
+    /* A bound framebuffer is queried once per allocation, not per video
+     * frame. GTK resize and ICC changes explicitly invalidate the snapshot. */
+    if (!self->framebuffer_information_valid || self->last_framebuffer != framebuffer) {
+        GLint red_bits = 0;
+        GLint green_bits = 0;
+        GLint blue_bits = 0;
+        glGetIntegerv(GL_RED_BITS, &red_bits);
+        glGetIntegerv(GL_GREEN_BITS, &green_bits);
+        glGetIntegerv(GL_BLUE_BITS, &blue_bits);
+        self->red_bits = MAX(red_bits, 0);
+        self->green_bits = MAX(green_bits, 0);
+        self->blue_bits = MAX(blue_bits, 0);
+        self->last_framebuffer = framebuffer;
+        self->framebuffer_information_valid = TRUE;
+    }
+    if (self->red_bits > 0 && self->green_bits > 0 && self->blue_bits > 0) {
+        depth = MIN(self->red_bits, MIN(self->green_bits, self->blue_bits));
+    }
     fbo.fbo = framebuffer;
     fbo.w = width_px;
     fbo.h = height_px;
@@ -1572,6 +1655,8 @@ mediakit_renderer_render(MediaKitRenderer *self,
         set_mpv_error(error, status, "Unable to render video frame");
         return FALSE;
     }
+    self->render_depth_bits = depth;
+    self->frame_submitted = TRUE;
     return TRUE;
 #else
     g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED,

@@ -403,6 +403,56 @@ private void test_stage6_empty_disc_session () {
     assert (session.disc_titles.get_n_items () == 0);
 }
 
+/** Distinguishes framebuffer bit depth and submitted SDR frames from real HDR output. */
+private void test_stage7_renderer_metadata () {
+    var unknown = new MediaKit.VideoRenderingInformation ();
+    assert (unknown.backend == "");
+    assert (unknown.render_depth_bits == 0);
+    assert (!unknown.has_ten_bit_framebuffer);
+    assert (unknown.presentation == MediaKit.HdrPresentation.UNVERIFIED);
+
+    var data = new VariantBuilder (new VariantType ("a{sv}"));
+    data.add ("{sv}", "backend", new Variant.string ("libmpv-opengl"));
+    data.add ("{sv}", "red-bits", new Variant.int32 (10));
+    data.add ("{sv}", "green-bits", new Variant.int32 (10));
+    data.add ("{sv}", "blue-bits", new Variant.int32 (10));
+    data.add ("{sv}", "render-depth-bits", new Variant.int32 (10));
+    data.add ("{sv}", "icc-active", new Variant.boolean (true));
+    data.add ("{sv}", "frame-submitted", new Variant.boolean (true));
+    var result = new MediaKit.VideoRenderingInformation.from_metadata (data.end ());
+    assert (result.backend == "libmpv-opengl");
+    assert (result.has_ten_bit_framebuffer);
+    assert (result.render_depth_bits == 10);
+    assert (result.icc_profile_active);
+    assert (result.frame_submitted);
+    assert (result.presentation == MediaKit.HdrPresentation.TONE_MAPPED_SDR);
+    assert (!unknown.equals_values (result));
+
+    var malformed = new VariantBuilder (new VariantType ("a{sv}"));
+    malformed.add ("{sv}", "red-bits", new Variant.int32 (-4));
+    malformed.add ("{sv}", "blue-bits", new Variant.string ("12"));
+    var safe = new MediaKit.VideoRenderingInformation.from_metadata (malformed.end ());
+    assert (safe.red_bits == 0 && safe.blue_bits == 0);
+    assert (!safe.has_ten_bit_framebuffer);
+    assert (safe.presentation == MediaKit.HdrPresentation.UNVERIFIED);
+}
+
+/** Keeps Stage 7 user policies independent of actual hardware HDR capabilities. */
+private void test_stage7_video_policies () {
+    var options = new MediaKit.PlaybackOptions ();
+    assert (options.tone_mapping == MediaKit.ToneMappingAlgorithm.AUTO);
+    assert (options.video_quality == MediaKit.VideoQualityPolicy.BALANCED);
+    options.tone_mapping = MediaKit.ToneMappingAlgorithm.BT2390;
+    options.video_quality = MediaKit.VideoQualityPolicy.HIGH_QUALITY;
+    assert (options.tone_mapping == MediaKit.ToneMappingAlgorithm.BT2390);
+    assert (options.video_quality == MediaKit.VideoQualityPolicy.HIGH_QUALITY);
+    var session = new MediaKit.MediaSession (options);
+    assert (session.capabilities.embedded_gpu_next == MediaKit.CapabilityStatus.UNAVAILABLE);
+    assert (session.capabilities.dolby_vision_fel == MediaKit.CapabilityStatus.UNVERIFIED);
+    assert (session.capabilities.native_hdr != MediaKit.CapabilityStatus.AVAILABLE);
+    assert (session.color_output_target == MediaKit.ColorOutputTarget.SDR_BT709_BT1886);
+}
+
 /** Registers small, deterministic public Core API checks. */
 int main (string[] args) {
     Test.init (ref args);
@@ -419,5 +469,7 @@ int main (string[] args) {
     Test.add_func ("/media/core/stage5-passthrough-preflight", test_stage5_passthrough_preflight);
     Test.add_func ("/media/core/stage6-disc-sources", test_stage6_disc_source_contract);
     Test.add_func ("/media/core/stage6-disc-session", test_stage6_empty_disc_session);
+    Test.add_func ("/media/core/stage7-rendering-metadata", test_stage7_renderer_metadata);
+    Test.add_func ("/media/core/stage7-rendering-policy", test_stage7_video_policies);
     return Test.run ();
 }

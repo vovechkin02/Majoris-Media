@@ -6,6 +6,8 @@ private void test_widget_binding () {
     view.session = session;
     controls.session = session;
     assert (view.session == session);
+    assert (!view.rendering_information.frame_submitted);
+    assert (view.rendering_information.presentation == MediaKit.HdrPresentation.UNVERIFIED);
     assert (controls.session == session);
     view.session = null;
     controls.session = null;

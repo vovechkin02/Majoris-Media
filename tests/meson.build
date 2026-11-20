@@ -64,6 +64,21 @@ if mpv.found()
 endif
 
 if mpv.found()
+  rendering_policy_test = executable(
+    'test-engine-video-policy',
+    'integration/engine-video-policy.vala',
+    dependencies: [core_api],
+  )
+  test(
+    'media-engine-video-policy',
+    rendering_policy_test,
+    args: [meson.current_source_dir() / 'fixtures/short-tone.wav'],
+    suite: 'integration',
+    timeout: 15,
+  )
+endif
+
+if mpv.found()
   transport_test = executable(
     'test-engine-transport',
     'integration/engine-transport.vala',

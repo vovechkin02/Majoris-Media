@@ -199,6 +199,7 @@ namespace MediaKit {
                                       Cancellable? cancellable = null) throws Error {
             cancellable?.set_error_if_cancelled ();
             AudioPolicy.validate (options);
+            VideoRenderingPolicy.validate (options);
             if (options.hdr_policy == HdrOutputPolicy.PREFER_NATIVE) {
                 throw new MediaError.UNSUPPORTED (
                     "Native HDR is unverified in the embedded OpenGL renderer; " +
@@ -462,7 +463,7 @@ namespace MediaKit {
         }
 
         /** Creates an operational backend only at the source-open boundary. */
-        private PlaybackBackend create_backend () {
+        private PlaybackBackend create_backend () throws Error {
             if (native_engine_is_available ()) {
                 return new MpvBackend (options);
             }

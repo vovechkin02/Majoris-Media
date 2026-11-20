@@ -1,6 +1,6 @@
 # Majoris Media
 
-**Version:** 0.6.0 (Stage 6 optical-disc source routing and navigation) · **API namespaces:** `MediaKit-1.0`,
+**Version:** 0.7.0 (Stage 7 advanced SDR rendering policies and telemetry) · **API namespaces:** `MediaKit-1.0`,
 `MediaKitGtk-1.0` · **Platform:** Majoris OS / Debian 13 · **License:** GPL-3.0-or-later
 
 Majoris Media is a reusable audio/video playback foundation for Majoris applications.
@@ -10,7 +10,7 @@ libmpv, and a **GtkGLArea**-attached OpenGL renderer. Applications retain owners
 windows, playlists, toolbars, persistent settings, and fullscreen policy.
 
 > **Verification status:** This is source implementation, not a validated release.
-> Stage 6 static checks passed, but Vala, Meson, libmpv and GTK4 development
+> Stage 7 static checks passed, but Vala, Meson, libmpv and GTK4 development
 > packages were unavailable in the authoring environment. Native compilation,
 > runtime playback, GTK rendering, ICC processing and hardware output are
 > **not verified**.
@@ -31,7 +31,7 @@ windows, playlists, toolbars, persistent settings, and fullscreen policy.
 
 ## Current implementation
 
-| Area | Stage 6 status |
+| Area | Stage 7 status |
 | --- | --- |
 | Local file and HTTP(S) source identity | Implemented; scheme validated before playback |
 | Per-session native engine | libmpv adapter implemented; independent handles |
@@ -48,7 +48,10 @@ windows, playlists, toolbars, persistent settings, and fullscreen policy.
 | Buffering and seek state | Cache pause, percentage, seeking and engine events |
 | Video decoder status | Observed `hwdec-current`, including software fallback |
 | Source color metadata | Live `VideoColorInformation`: transfer, primaries, range, matrix, HDR flags, luminance and DV profile when available |
-| Embedded video target | Explicit 8-bit SDR BT.709 / BT.1886 output; tone mapping delegated to libmpv |
+| Embedded video target | SDR BT.709/BT.1886 processing, configurable legacy-compatible tone mapping |
+| Renderer quality | Opt-in bounded debanding, default balanced |
+| Framebuffer telemetry | GL RGB bit depth and render dithering depth measured on active framebuffer; no HDR output inference |
+| Embedded gpu-next | Unavailable in this adapter pending an official supported API |
 | Display ICC | Optional caller-provided ICC blob through `mpv_render_context_set_parameter`; profile selection belongs to host |
 | Native HDR policy | `PREFER_NATIVE` rejected until actual GTK/compositor HDR output exists; no false positive |
 | Media probe | Standalone probe API reserved; still reports unavailable |
@@ -67,11 +70,28 @@ packages; missing dependencies stop configuration rather than silently generatin
 non-playing release. An intentionally non-playing build can use `-Dmpv=disabled`
 for API development and headless testing.
 
+## Stage 7 rendering
+
+`PlaybackOptions.tone_mapping` controls one of four validated SDR algorithms:
+`AUTO`, `BT2390`, `MOBIUS`, or `HABLE`; `video_quality` selects `BALANCED`
+(default) or opt-in `HIGH_QUALITY` debanding. Policies are set before opening a
+new source. `MediaView.rendering_information` and its change signal provide
+GTK framebuffer RGB bit depths, the libmpv render-depth parameter, whether a
+caller-supplied ICC profile was accepted, and a submitted-frame indication.
+The telemetry is sampled only when needed, not on every decoded frame.
+
+**This is not native HDR:** libmpv's embedded OpenGL path remains an SDR
+pipeline. A 10-bit framebuffer does not establish HDR scanout. `gpu-next`,
+Dolby Vision Profile 7 MEL/FEL, compositor HDR10+ signaling, and real native
+HDR must be implemented and validated separately. See
+[advanced rendering](docs/advanced-rendering.md) and
+[Stage 7 verification](docs/verification-stage7.md).
+
 ## Codec and output policy
 
 Decoding capability is supplied by the installed libmpv build and its FFmpeg
 libraries. **No blanket format/codec or hardware-decoding guarantee is made.**
-Stage 6 retains a PCM WAV smoke fixture plus a tiny generated MKV with two
+Stage 7 retains a PCM WAV smoke fixture plus a tiny generated MKV with two
 PCM audio tracks, one MPEG-4 video track, subtitles and two chapters. This is
 not a complete format qualification matrix. Source HDR signaling is not equivalent to native
 HDR output; Atmos/DTS:X sources do not guarantee object-audio rendering or
@@ -79,7 +99,7 @@ encoded receiver passthrough. Read [formats](docs/formats.md).
 
 ## Dependencies and building
 
-Required with Stage 6 default options:
+Required with Stage 7 default options:
 
 - Meson >=1.4, Ninja, `valac`, C compiler, GLib/GIO >=2.76.
 - `libmpv-dev` and `libepoxy-dev` for the native engine and GL resolver.
@@ -266,7 +286,7 @@ The native smoke test opens a short PCM WAV; a separate representative generated
 MKV exercises live track/chapter discovery and track/visibility controls.
 Source validation, cancellation and GTK session binding are covered separately.
 See [testing](docs/TESTING.md) and the precise
-[Stage 6 verification report](docs/verification-stage6.md). No benchmarks are
+[Stage 7 verification report](docs/verification-stage7.md). No benchmarks are
 claimed; hardware decoding, 4K, HDR and receiver passthrough need target
 hardware qualification.
 
@@ -285,7 +305,7 @@ must be evaluated for binary redistribution and Debian packaging.
 
 ## Stage 6 — DVD, Blu-ray and standalone M2TS
 
-Stage 6 adds explicit DVD/Blu-ray source construction, isolated optical-disc
+Stage 6 added explicit DVD/Blu-ray source construction, isolated optical-disc
 device configuration, native disc-title/edition inventory and selection, and
 conditional interactive menu support on mpv 0.42+. `.m2ts` can be opened as a
 normal local file independently of a Blu-ray disc. `MediaKitGtk` optionally

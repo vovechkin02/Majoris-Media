@@ -33,6 +33,20 @@ namespace MediaKit {
             default = HdrOutputPolicy.AUTO;
         }
 
+        /** Selected renderer-compatible SDR tone mapping algorithm. */
+        public ToneMappingAlgorithm tone_mapping {
+            get;
+            set;
+            default = ToneMappingAlgorithm.AUTO;
+        }
+
+        /** Optional bounded debanding, not a promise of GPU performance. */
+        public VideoQualityPolicy video_quality {
+            get;
+            set;
+            default = VideoQualityPolicy.BALANCED;
+        }
+
         /** Whether seek requests should prefer precision over fast keyframe seeks. */
         public bool accurate_seek { get; set; default = true; }
 

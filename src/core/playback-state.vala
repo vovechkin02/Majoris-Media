@@ -132,6 +132,26 @@ namespace MediaKit {
         SDR_BT709_BT1886
     }
 
+    /** Restricts SDR tone mapping to algorithms available on legacy libmpv OpenGL. */
+    public enum ToneMappingAlgorithm {
+        /** Use the engine's stable automatic SDR curve. */
+        AUTO,
+        /** ITU-R BT.2390 perceptual EETF. */
+        BT2390,
+        /** Linear-segment Möbius roll-off. */
+        MOBIUS,
+        /** Hable filmic roll-off. */
+        HABLE
+    }
+
+    /** Balances GPU work against visible banding on the embedded SDR path. */
+    public enum VideoQualityPolicy {
+        /** Preserve the normal GPU workload and default scaling. */
+        BALANCED,
+        /** Enable a bounded debanding pass for sufficiently fast devices. */
+        HIGH_QUALITY
+    }
+
     /** Identifies the spatial-audio signaling found within a source. */
     public enum SpatialAudioFormat {
         /** The source has not been inspected or no conclusion was reached. */

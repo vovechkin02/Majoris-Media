@@ -1,3 +1,13 @@
+majoris-media (0.7.0-1) unstable; urgency=medium
+
+  * Add bounded SDR tone-mapping selection and video quality policy.
+  * Observe the GTK OpenGL framebuffer channel depth and render parameter.
+  * Expose renderer-local ICC and SDR presentation telemetry through the GTK view.
+  * Explicitly gate unverified native HDR, gpu-next and Dolby Vision FEL claims.
+  * Preserve public Stage 1-6 interfaces and separate headless Core and GTK APIs.
+
+ -- Majoris Maintainers <maintainers@invalid.example>  Fri, 20 Nov 2026 19:56:00 +1100
+
 majoris-media (0.6.0-1) unstable; urgency=medium
 
   * Add typed DVD and Blu-ray source definitions with native device-path routing.

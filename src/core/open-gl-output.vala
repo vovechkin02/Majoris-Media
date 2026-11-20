@@ -11,6 +11,21 @@ namespace MediaKit {
         /** Signal listener owned by this output object. */
         private ulong update_handler_id = 0;
 
+        /** Latest measured framebuffer snapshot, cached outside the frame hot path. */
+        public VideoRenderingInformation rendering_information { get; private set; }
+
+        /** Notifies clients when an actual output attribute changes. */
+        public signal void rendering_information_changed (VideoRenderingInformation information);
+
+        /** Last dimensions for which framebuffer telemetry was sampled. */
+        private int sampled_width_px = 0;
+
+        /** Last dimensions for which framebuffer telemetry was sampled. */
+        private int sampled_height_px = 0;
+
+        /** Invalidates the cached measurement after ICC or context changes. */
+        private bool needs_sample = true;
+
         /** Tracks explicit detach calls before the host GL context is lost. */
         private bool detached = false;
 
@@ -18,6 +33,7 @@ namespace MediaKit {
         internal OpenGlOutput (MediaKitNative.Renderer renderer) {
             Object ();
             this.renderer = renderer;
+            rendering_information = new VideoRenderingInformation ();
             weak OpenGlOutput weak_self = this;
             update_handler_id = renderer.update_requested.connect (() => {
                 if (weak_self != null && !weak_self.detached) {
@@ -32,6 +48,32 @@ namespace MediaKit {
                 throw new MediaError.INVALID_ARGUMENT ("OpenGL output is detached");
             }
             renderer.render (width_px, height_px);
+            if (needs_sample || sampled_width_px != width_px ||
+                sampled_height_px != height_px) {
+                sampled_width_px = width_px;
+                sampled_height_px = height_px;
+                needs_sample = false;
+                refresh_rendering_information ();
+            }
+        }
+
+        /** Forces a new framebuffer measurement when the host reallocates its GL target. */
+        public void invalidate_framebuffer () {
+            if (!detached) {
+                renderer.invalidate_framebuffer ();
+                needs_sample = true;
+            }
+        }
+
+        /** Samples GL telemetry only after rendering or when output configuration changes. */
+        private void refresh_rendering_information () {
+            var next = new VideoRenderingInformation.from_metadata (
+                renderer.get_output_information ()
+            );
+            if (!rendering_information.equals_values (next)) {
+                rendering_information = next;
+                rendering_information_changed (next);
+            }
         }
 
         /** Installs a caller-selected display ICC profile on the current GL thread. */
@@ -40,6 +82,8 @@ namespace MediaKit {
                 throw new MediaError.INVALID_ARGUMENT ("OpenGL output is detached");
             }
             renderer.set_icc_profile (profile);
+            invalidate_framebuffer ();
+            refresh_rendering_information ();
         }
 
         /** Releases graphics resources before a GLArea loses its current context. */
@@ -48,6 +92,8 @@ namespace MediaKit {
                 return;
             }
             detached = true;
+            rendering_information = new VideoRenderingInformation ();
+            rendering_information_changed (rendering_information);
             if (update_handler_id != 0) {
                 SignalHandler.disconnect (renderer, update_handler_id);
                 update_handler_id = 0;

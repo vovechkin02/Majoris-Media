@@ -63,6 +63,16 @@ namespace MediaKitGtk {
             display_icc_profile = profile;
         }
 
+        /** Latest observed GTK GL framebuffer state; does not claim monitor HDR. */
+        public MediaKit.VideoRenderingInformation rendering_information {
+            get { return current_rendering_information; }
+        }
+
+        /** Published when the current GL attachment or ICC state actually changes. */
+        public signal void rendering_information_changed (
+            MediaKit.VideoRenderingInformation information
+        );
+
         /** Overlay status message shown only for empty, loading or failed streams. */
         [GtkChild]
         private unowned Gtk.Label status_label;
@@ -73,6 +83,10 @@ namespace MediaKitGtk {
 
         /** Strongly referenced session, which may be reassigned by the host. */
         private MediaKit.MediaSession? current_session;
+
+        /** Reusable last-known GL output measurement for widget clients. */
+        private MediaKit.VideoRenderingInformation current_rendering_information =
+            new MediaKit.VideoRenderingInformation ();
 
         /** One renderer per session, created only while GtkGLArea has a current context. */
         private MediaKit.OpenGlOutput? output;
@@ -91,6 +105,9 @@ namespace MediaKitGtk {
 
         /** Buffering-state subscription for an accurate in-widget overlay. */
         private ulong buffering_handler_id = 0;
+
+        /** GL telemetry subscription, disconnected with renderer lifetime. */
+        private ulong rendering_information_handler_id = 0;
 
         /** Native frame-update signal subscription. */
         private ulong frame_handler_id = 0;
@@ -116,10 +133,18 @@ namespace MediaKitGtk {
             render_area.unrealize.connect (() => {
                 weak_owner?.on_unrealize ();
             });
+            render_area.resize.connect ((width, height) => {
+                weak_owner?.on_framebuffer_resize ();
+            });
             render_area.render.connect ((context) => {
                 return weak_owner == null || weak_owner.render_frame ();
             });
             update_status ();
+        }
+
+        /** Invalidates GL precision after GTK reallocates its render target. */
+        private void on_framebuffer_resize () {
+            output?.invalidate_framebuffer ();
         }
 
         /** Routes directional keys only while an interactive disc menu is active. */
@@ -210,6 +235,11 @@ namespace MediaKitGtk {
                 }
                 render_failure = null;
                 weak MediaView weak_owner = this;
+                rendering_information_handler_id = output.rendering_information_changed.connect (
+                    (information) => {
+                        weak_owner?.apply_rendering_information (information);
+                    }
+                );
                 frame_handler_id = output.update_requested.connect (() => {
                     if (weak_owner != null) {
                         weak_owner.render_area.queue_render ();
@@ -222,6 +252,14 @@ namespace MediaKitGtk {
                 render_failure = error.message;
                 status_label.label = render_failure;
                 status_label.visible = true;
+            }
+        }
+
+        /** Notifies clients only for actual changes in renderer-local metadata. */
+        private void apply_rendering_information (MediaKit.VideoRenderingInformation info) {
+            if (!current_rendering_information.equals_values (info)) {
+                current_rendering_information = info;
+                rendering_information_changed (info);
             }
         }
 
@@ -256,11 +294,16 @@ namespace MediaKitGtk {
                 SignalHandler.disconnect (output, frame_handler_id);
                 frame_handler_id = 0;
             }
+            if (rendering_information_handler_id != 0) {
+                SignalHandler.disconnect (output, rendering_information_handler_id);
+                rendering_information_handler_id = 0;
+            }
             if (render_area.get_realized ()) {
                 render_area.make_current ();
             }
             output.detach ();
             output = null;
+            apply_rendering_information (new MediaKit.VideoRenderingInformation ());
         }
 
         /** Shows only actual loading, empty and error states over the playback surface. */

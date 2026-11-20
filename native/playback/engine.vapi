@@ -22,6 +22,12 @@ namespace MediaKitNative {
         /** Requests a new device and reports eventual failure asynchronously. */
         public bool select_audio_device (string device_id) throws GLib.Error;
 
+        /** Selects a bounded SDR tone mapping and quality policy at initialization. */
+        [CCode (cname = "mediakit_engine_new_with_audio_and_video")]
+        public Engine.with_audio_and_video (string device_id, string codecs,
+                                            string pcm_channels, string tone_mapping,
+                                            bool deband);
+
         /** Resolves after an actual native file-loaded or error event. */
         public async bool load_async (string uri, GLib.Cancellable? cancellable = null)
                                       throws GLib.Error;
@@ -133,6 +139,12 @@ namespace MediaKitNative {
 
         /** Applies a validated host-provided display ICC profile on its GL thread. */
         public bool set_icc_profile (GLib.Bytes? profile) throws GLib.Error;
+
+        /** Invalidates cached GL precision on a host framebuffer reallocation. */
+        public void invalidate_framebuffer ();
+
+        /** Reports actual bound framebuffer precision and accepted SDR output state. */
+        public GLib.Variant get_output_information ();
 
         /** Releases GPU objects with the same OpenGL context current. */
         public void release ();

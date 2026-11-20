@@ -43,6 +43,23 @@ MediaKitEngine *mediakit_engine_new_with_audio(const gchar *device_id,
                                                const gchar *codecs,
                                                const gchar *pcm_channels);
 
+/** mediakit_engine_new_with_audio_and_video:
+ * @device_id: Selected native device ID or "auto".
+ * @codecs: Explicit IEC 61937 allowlist, or an empty string.
+ * @pcm_channels: Engine-compatible PCM layout policy.
+ * @tone_mapping: Validated, legacy-OpenGL-compatible SDR mapping name.
+ * @deband: Whether to enable a bounded GPU debanding pass.
+ *
+ * All video options must be configured before mpv_initialize. Native HDR
+ * and gpu-next presentation are not exposed by this API.
+ * Returns: (transfer full): New engine, whose open may fail if initialization fails.
+ */
+MediaKitEngine *mediakit_engine_new_with_audio_and_video(const gchar *device_id,
+                                                         const gchar *codecs,
+                                                         const gchar *pcm_channels,
+                                                         const gchar *tone_mapping,
+                                                         gboolean deband);
+
 /** mediakit_engine_get_audio_information:
  * @self: Operational playback engine.
  *
@@ -284,6 +301,24 @@ gboolean mediakit_renderer_render(MediaKitRenderer *self,
 gboolean mediakit_renderer_set_icc_profile(MediaKitRenderer *self,
                                             GBytes *profile,
                                             GError **error);
+
+/** mediakit_renderer_invalidate_framebuffer:
+ * @self: Live renderer on the owning GL context.
+ *
+ * Forces channel-precision remeasurement on the next render, for a GTK
+ * framebuffer reallocation or output configuration change.
+ */
+void mediakit_renderer_invalidate_framebuffer(MediaKitRenderer *self);
+
+/** mediakit_renderer_get_output_information:
+ * @self: Live GL-thread renderer with a currently bound framebuffer.
+ *
+ * Returns observed GL channel precision, the submitted render parameter, and
+ * accepted ICC configuration as an a{sv} snapshot. This information does not
+ * establish compositor colorspace, HDR scanout, or Dolby Vision reconstruction.
+ * Returns: (transfer full): Caller-owned GVariant dictionary.
+ */
+GVariant *mediakit_renderer_get_output_information(MediaKitRenderer *self);
 
 /** mediakit_renderer_release:
  * @self: Renderer being detached on its owning OpenGL context.

@@ -17,6 +17,12 @@ namespace MediaKit {
         /** Verified HDR presentation path, independent of source metadata. */
         public HdrPresentation hdr_presentation { get; construct; }
 
+        /** Embedded gpu-next/libplacebo output is not available in this adapter. */
+        public CapabilityStatus embedded_gpu_next { get; construct; }
+
+        /** No validated full Profile 7 FEL reconstruction exists for this GTK renderer. */
+        public CapabilityStatus dolby_vision_fel { get; construct; }
+
         /** Creates a conservative snapshot without claiming untested output support. */
         public MediaCapabilities (CapabilityStatus playback_engine = CapabilityStatus.UNKNOWN) {
             Object (
@@ -24,7 +30,9 @@ namespace MediaKit {
                 video_decoding: CapabilityStatus.UNKNOWN,
                 native_hdr: CapabilityStatus.UNVERIFIED,
                 encoded_audio: CapabilityStatus.UNVERIFIED,
-                hdr_presentation: HdrPresentation.UNVERIFIED
+                hdr_presentation: HdrPresentation.UNVERIFIED,
+                embedded_gpu_next: CapabilityStatus.UNAVAILABLE,
+                dolby_vision_fel: CapabilityStatus.UNVERIFIED
             );
         }
     }

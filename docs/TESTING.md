@@ -1,4 +1,4 @@
-# Testing and release qualification — Stage 5
+# Testing and release qualification — Stage 7
 
 ## Focused tests
 
@@ -84,3 +84,18 @@ Blu-ray ISO, title/playlist selection, chapter navigation and real disc menus
 on both stock Debian and an mpv 0.42+ build. Use only test media that can
 legally be accessed. For real disc drive testing, also verify cancellation,
 missing discs, source replacement and eject/reinsert behavior.
+
+## Stage 7 renderer qualification
+
+- `media-core-contract` includes policy and framebuffer-metadata cases; no
+  hard-coded bit depth is inferred from HEVC Main10 source metadata.
+- `media-engine-video-policy` initializes a real libmpv instance with explicit
+  BT.2390 tone mapping and high-quality debanding. It opens the existing WAV
+  fixture and validates option acceptance, **not** HDR video output.
+- `media-gtk-contract` verifies a never-realized GTK widget does not claim a
+  rendered frame, even when a playback session is bound.
+- Manually verify `VideoRenderingInformation` against the framebuffer and
+  compare SDR/HDR-to-SDR imagery on calibrated equipment. Monitor native HDR,
+  HDR10+, Dolby Vision FEL, and `gpu-next` are **not** implemented here.
+- See [advanced-rendering.md](advanced-rendering.md) and
+  [verification-stage7.md](verification-stage7.md) before ISO inclusion.
