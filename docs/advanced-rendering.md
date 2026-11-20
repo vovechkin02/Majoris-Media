@@ -186,3 +186,25 @@ playback, while a user cancellation still propagates promptly.
 
 See [0.7.3 verification](verification-stage7-embedded.md) for build and
 hardware qualification requirements.
+
+## Stage 7.4 — GDK color-state-aware rendering (experimental)
+
+A distinct `HdrMediaView` can render via an opt-in patched libmpv `gpu-next`
+OpenGL API to a bounded RGBA16F target. A private C adapter transfers the
+completed texture to GTK as a `GdkGLTextureBuilder` with BT.2100/PQ color
+state, so GTK receives explicitly tagged output rather than assuming SDR.
+This does not alter the existing `MediaView` or require a new decoder,
+demultiplexer, or synchronization clock. There is no CPU framebuffer readback.
+
+`PlaybackOptions.hdr_policy=EXPERIMENTAL_PQ_TEXTURE` selects the BT.2020/PQ
+engine target only for the next opened source. The standard `MediaView`
+refuses that output, and the HDR widget refuses SDR sessions. A failed
+patched renderer or float framebuffer is reported as an error, never a silent
+fallback. Each new native frame owns an immutable GPU texture until GTK
+releases it. GPU memory and GTK frame-time benchmarks remain required.
+
+**Not a display-certification path:** GDK texture color-state metadata may
+be converted or mapped by the compositor. Dolby Vision FEL reconstruction,
+actual Wayland color-management negotiation, native HDR monitor EOTF, and
+HDR10+ dynamic HDMI metadata need separate real-device evidence. Refer to
+[verification-stage7-pq.md](verification-stage7-pq.md).

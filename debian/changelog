@@ -1,3 +1,11 @@
+majoris-media (0.7.4-1) unstable; urgency=medium
+
+  * Add opt-in GTK4 BT.2100/PQ color-tagged GL texture rendering bridge.
+  * Preserve the default SDR GtkGLArea behavior and strict HDR capability gates.
+  * Keep native HDR, dynamic HDMI metadata, and Profile 7 FEL explicitly unverified.
+
+ -- Majoris Maintainers <maintainers@invalid.example>  Sat, 21 Nov 2026 09:30:00 +1100
+
 majoris-media (0.7.3-1) unstable; urgency=medium
 
   * Add an explicitly opt-in experimental libmpv GPU-next OpenGL adapter,

@@ -1,4 +1,4 @@
-# Public API and operation contracts — Stage 7.2 (0.7.2)
+# Public API and operation contracts — Stage 7.4 (0.7.4)
 
 ## Stability and types
 
@@ -266,3 +266,22 @@ patched libmpv headers/runtime through
 The draft upstream interface is experimental and **not suitable for the normal
 Debian package**. The default libmpv renderer and all existing playback APIs
 remain unchanged. See `docs/verification-stage7-embedded.md`.
+
+## Experimental GTK PQ API (0.7.4)
+
+- `HdrOutputPolicy.EXPERIMENTAL_PQ_TEXTURE`: requests a PQ float-texture
+  renderer on the next opened source. It is intentionally separate from
+  `PREFER_NATIVE`, which still fails when native display HDR is unverified.
+- `ColorOutputTarget.EXPERIMENTAL_BT2020_PQ` reflects the **selected engine
+  output target**, not the compositor EOTF. The target is frozen for the
+  active source even if caller-owned `PlaybackOptions` are subsequently edited.
+- `MediaKitGtk.HdrMediaView`: an optional GTK widget compiled only with
+  `-Dexperimental_gtk_pq=true` and the patched `gpu-next` interface. Its
+  `session` references the current playback source; `pq_texture_submitted`
+  means only that a color-tagged frame was passed to GDK. The constant
+  `presentation=UNVERIFIED` explicitly avoids implying native monitor HDR.
+- The normal `MediaKitGtk.MediaView` refuses PQ sessions to avoid showing
+  unconverted PQ pixels on an SDR GL framebuffer.
+- Native `HdrFrame` is an implementation detail and is not a public VAPI/GIR
+  or installable header contract. Source compatibility with released Core and
+  default GTK APIs is preserved.

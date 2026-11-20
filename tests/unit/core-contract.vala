@@ -579,6 +579,44 @@ private void test_stage7_experimental_embedding () {
     assert (status.native_hdr != MediaKit.CapabilityStatus.AVAILABLE);
 }
 
+/** Checks that the experimental PQ target never silently becomes verified HDR. */
+private void test_stage7_pq_texture_policy () {
+    var options = new MediaKit.PlaybackOptions ();
+    options.hdr_policy = MediaKit.HdrOutputPolicy.EXPERIMENTAL_PQ_TEXTURE;
+    var session = new MediaKit.MediaSession (options);
+    assert (session.color_output_target == MediaKit.ColorOutputTarget.SDR_BT709_BT1886);
+    assert (session.capabilities.native_hdr != MediaKit.CapabilityStatus.AVAILABLE);
+    assert (MediaKit.ColorOutputTarget.EXPERIMENTAL_BT2020_PQ !=
+            MediaKit.ColorOutputTarget.SDR_BT709_BT1886);
+    if (!MediaKit.MediaSession.supports_experimental_gpu_next_embedding ()) {
+        var loop = new MainLoop ();
+        try {
+            var source = new MediaKit.MediaSource.for_path ("/tmp/no-such-pq-media.mkv");
+            Idle.add (() => {
+                session.open_async.begin (source, null, (object, result) => {
+                    bool refused = false;
+                    try {
+                        session.open_async.end (result);
+                    } catch (MediaKit.MediaError.UNSUPPORTED error) {
+                        refused = true;
+                    } catch (Error error) {
+                        assert_not_reached ();
+                    }
+                    assert (refused);
+                    assert (session.source == null);
+                    assert (session.color_output_target ==
+                            MediaKit.ColorOutputTarget.SDR_BT709_BT1886);
+                    loop.quit ();
+                });
+                return Source.REMOVE;
+            });
+            loop.run ();
+        } catch (Error error) {
+            assert_not_reached ();
+        }
+    }
+}
+
 /** Registers small, deterministic public Core API checks. */
 int main (string[] args) {
     Test.init (ref args);
@@ -600,5 +638,6 @@ int main (string[] args) {
     Test.add_func ("/media/core/stage7-gpu-next-candidate", test_stage7_gpu_next_capabilities);
     Test.add_func ("/media/core/stage7-gpu-next-arguments", test_stage7_gpu_next_arguments);
     Test.add_func ("/media/core/stage7-experimental-embedding", test_stage7_experimental_embedding);
+    Test.add_func ("/media/core/stage7-pq-texture-policy", test_stage7_pq_texture_policy);
     return Test.run ();
 }

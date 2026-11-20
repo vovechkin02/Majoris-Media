@@ -243,6 +243,13 @@ namespace MediaKitGtk {
 
         /** Attaches one libmpv renderer without inventing a second GL context. */
         private void setup_renderer () {
+            if (current_session != null &&
+                current_session.color_output_target ==
+                MediaKit.ColorOutputTarget.EXPERIMENTAL_BT2020_PQ) {
+                render_failure = "Use HdrMediaView for a PQ-tagged texture";
+                update_status ();
+                return;
+            }
             if (output != null || current_session == null || current_session.source == null ||
                 !render_area.get_realized ()) {
                 return;

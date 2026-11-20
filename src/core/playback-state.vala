@@ -126,10 +126,12 @@ namespace MediaKit {
         UNSUPPORTED
     }
 
-    /** Identifies the only established embedded-OpenGL output color target. */
+    /** Declares the embedded SDR target or experimental PQ texture encoding. */
     public enum ColorOutputTarget {
         /** Eight-bit SDR BT.709 primaries with a BT.1886 transfer curve. */
-        SDR_BT709_BT1886
+        SDR_BT709_BT1886,
+        /** Opt-in BT.2020/PQ GL texture; compositor HDR is not guaranteed. */
+        EXPERIMENTAL_BT2020_PQ
     }
 
     /** Restricts SDR tone mapping to algorithms available on legacy libmpv OpenGL. */
@@ -216,6 +218,8 @@ namespace MediaKit {
         /** Render HDR content as tone-mapped SDR. */
         TONE_MAP_SDR,
         /** Request native HDR only when verified by the display pipeline. */
-        PREFER_NATIVE
+        PREFER_NATIVE,
+        /** Request a color-tagged PQ framebuffer through a patched gpu-next renderer. */
+        EXPERIMENTAL_PQ_TEXTURE
     }
 }

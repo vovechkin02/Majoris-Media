@@ -128,3 +128,16 @@ HDR-enabled monitor, run reference SDR/HDR10/HLG/HDR10+/DV Profile 5/8/7
 content, compare screenshots and external HDR signaling, and record whether
 HDR output was directly signaled or tone-mapped. Native HDR success cannot be
 inferred from the `GpuNextPlaybackStatus` source transfer field.
+
+## Stage 7.4 experimental PQ texture path
+
+- Core tests verify that a PQ request is refused when the patched libmpv
+  feature is absent and that no native HDR capability is inferred.
+- The opt-in `media-gtk-hdr-contract` test verifies unloaded widget state
+  and session attachment without requiring a GPU.
+- A real patched build must prove RGBA16F framebuffer completeness, context
+  lifetime, immutable texture ownership, and correct GDK BT.2100/PQ tagging.
+  Do not count these checks as passed based on this repository's static tests.
+- Hardware colorimetry, Wayland HDR mode, compositor conversion, 4K frame
+  performance, HDR10+ metadata and Dolby Vision Profile 7 FEL reproduction
+  remain independently required before any product support claim.

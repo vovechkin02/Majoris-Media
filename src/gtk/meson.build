@@ -5,11 +5,27 @@ gtk_resources = gnome.compile_resources(
   source_dir: '../../data',
   c_name: 'media_kit_gtk',
 )
+gtk_sources = [
+  'media-view.vala',
+  'media-controls.vala',
+  'gpu-next-controls.vala',
+]
+gtk_extra_deps = []
+if experimental_gtk_pq
+  gtk_sources += [
+    'hdr-media-view.vala',
+    '../../native/gtk/hdr-frame.c',
+    '../../native/gtk/hdr-frame.vapi',
+  ]
+  gtk_extra_deps += [epoxy]
+endif
+
 gtk_library = shared_library(
   'majoris-media-gtk4',
-  files('media-view.vala', 'media-controls.vala', 'gpu-next-controls.vala'),
+  files(gtk_sources),
   gtk_resources,
-  dependencies: [core_api, gtk],
+  dependencies: [core_api, gtk] + gtk_extra_deps,
+  include_directories: include_directories('../../native/gtk'),
   vala_args: ['--shared-library=libmajoris-media-gtk4.so.0', '--hide-internal'],
   version: meson.project_version(),
   soversion: '0',

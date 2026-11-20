@@ -478,11 +478,12 @@ mediakit_engine_class_init(MediaKitEngineClass *klass)
         0, NULL, NULL, NULL, G_TYPE_NONE, 0);
 }
 
-/** Allocates a playback engine with independently selected audio and SDR video policies. */
+/** Allocates a playback engine with an explicitly selected color-transfer target. */
 MediaKitEngine *
-mediakit_engine_new_with_audio_and_video(const gchar *device_id, const gchar *codecs,
-                                         const gchar *pcm_channels,
-                                         const gchar *tone_mapping, gboolean deband)
+mediakit_engine_new_with_video_target(const gchar *device_id, const gchar *codecs,
+                                      const gchar *pcm_channels,
+                                      const gchar *tone_mapping, gboolean deband,
+                                      gboolean experimental_pq)
 {
     MediaKitEngine *self = g_object_new(MEDIAKIT_TYPE_ENGINE, NULL);
 #ifdef MEDIAKIT_HAVE_MPV
@@ -491,6 +492,13 @@ mediakit_engine_new_with_audio_and_video(const gchar *device_id, const gchar *co
     if (self->player == NULL) {
         return self;
     }
+#ifndef MEDIAKIT_EXPERIMENTAL_EMBEDDED_GPU_NEXT
+    if (experimental_pq) {
+        mpv_terminate_destroy(self->player);
+        self->player = NULL;
+        return self;
+    }
+#endif
     mpv_set_option_string(self->player, "vo", "libmpv");
     mpv_set_option_string(self->player, "hwdec", "auto-safe");
     mpv_set_option_string(self->player, "terminal", "no");
@@ -513,15 +521,21 @@ mediakit_engine_new_with_audio_and_video(const gchar *device_id, const gchar *co
         self->player = NULL;
         return self;
     }
-    /* An unverified GTK GL framebuffer is never advertised as a native HDR sink.
-     * Convert input SDR/HDR to a well-defined 8-bit BT.709/BT.1886 target.
-     * A supplied display ICC profile may further refine SDR color conversion. */
-    status = mpv_set_option_string(self->player, "target-prim", "bt.709");
+    /* The default GL framebuffer uses a BT.709/BT.1886 SDR target. An opt-in
+     * patched renderer may instead fill a BT.2100/PQ float texture, which GTK
+     * must independently label. Neither path proves a native display HDR mode. */
+    /* A PQ texture is only meaningful when the owning GTK widget supplies
+     * a BT.2100 color state and the patched libmpv renderer is selected.
+     * Never force PQ on the default GtkGLArea framebuffer. */
+    status = mpv_set_option_string(self->player, "target-prim",
+                                   experimental_pq ? "bt.2020" : "bt.709");
     if (status >= 0) {
-        status = mpv_set_option_string(self->player, "target-trc", "bt.1886");
+        status = mpv_set_option_string(self->player, "target-trc",
+                                       experimental_pq ? "pq" : "bt.1886");
     }
     if (status >= 0) {
-        status = mpv_set_option_string(self->player, "icc-profile-auto", "yes");
+        status = mpv_set_option_string(self->player, "icc-profile-auto",
+                                       experimental_pq ? "no" : "yes");
     }
     /* The embedded libmpv GL backend does not expose gpu-next HDR scanout or
      * full Dolby Vision Profile 7 FEL rendering. Use only supported SDR options. */
@@ -566,6 +580,16 @@ mediakit_engine_new_with_audio_and_video(const gchar *device_id, const gchar *co
     mpv_set_wakeup_callback(self->player, on_mpv_wakeup, self);
 #endif
     return self;
+}
+
+/** Retains the original SDR constructor ABI for existing applications. */
+MediaKitEngine *
+mediakit_engine_new_with_audio_and_video(const gchar *device_id, const gchar *codecs,
+                                         const gchar *pcm_channels,
+                                         const gchar *tone_mapping, gboolean deband)
+{
+    return mediakit_engine_new_with_video_target(device_id, codecs, pcm_channels,
+                                                  tone_mapping, deband, FALSE);
 }
 
 /** Preserves the original audio-only constructor and its default SDR behavior. */

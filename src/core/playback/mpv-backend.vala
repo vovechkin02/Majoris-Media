@@ -64,11 +64,12 @@ namespace MediaKit {
 
         /** Creates a per-request native engine to isolate superseded load completions. */
         public MpvBackend (PlaybackOptions options) throws Error {
-            engine = new MediaKitNative.Engine.with_audio_and_video (
+            engine = new MediaKitNative.Engine.with_video_target (
                 options.audio_device_id, AudioPolicy.codecs_for_engine (options),
                 AudioPolicy.pcm_channels_for_engine (options),
                 VideoRenderingPolicy.tone_mapping_option (options.tone_mapping),
-                VideoRenderingPolicy.should_deband (options.video_quality)
+                VideoRenderingPolicy.should_deband (options.video_quality),
+                options.hdr_policy == HdrOutputPolicy.EXPERIMENTAL_PQ_TEXTURE
             );
             weak MpvBackend weak_self = this;
             handlers += engine.ended.connect (() => {

@@ -6,3 +6,6 @@ option('introspection', type: 'feature', value: 'auto', description: 'Generate G
 
 option('experimental_embedded_gpu_next', type: 'boolean', value: false,
        description: 'Opt in to unmerged libmpv OpenGL gpu-next rendering ABI (requires matching patched headers and library)')
+
+option('experimental_gtk_pq', type: 'boolean', value: false,
+       description: 'Opt-in Gtk GLTextureBuilder BT.2100/PQ frame presentation (patched gpu-next only; not certified HDR scanout)')

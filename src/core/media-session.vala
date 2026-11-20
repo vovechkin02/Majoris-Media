@@ -48,10 +48,16 @@ namespace MediaKit {
         /** Emitted when enumerated output devices or their selection changes. */
         public signal void audio_devices_changed ();
 
-        /** Embedded GtkGLArea renders into a defined SDR target, not native HDR. */
+        /** Requested output transfer and primaries, not measured display scanout. */
         public ColorOutputTarget color_output_target {
-            get { return ColorOutputTarget.SDR_BT709_BT1886; }
+            get {
+                return active_color_output_target;
+            }
         }
+
+        /** Frozen output selection for the active source, not a mutable options reference. */
+        private ColorOutputTarget active_color_output_target =
+            ColorOutputTarget.SDR_BT709_BT1886;
 
         /** Emitted when source color metadata actually changes. */
         public signal void video_color_changed (VideoColorInformation information);
@@ -202,10 +208,20 @@ namespace MediaKit {
             VideoRenderingPolicy.validate (options);
             if (options.hdr_policy == HdrOutputPolicy.PREFER_NATIVE) {
                 throw new MediaError.UNSUPPORTED (
-                    "Native HDR is unverified in the embedded OpenGL renderer; " +
-                    "choose AUTO or TONE_MAP_SDR for the supported SDR output target"
+                    "Native HDR display scanout is not verifiable through this API; " +
+                    "use EXPERIMENTAL_PQ_TEXTURE only with an explicitly selected HDR view"
                 );
             }
+            if (options.hdr_policy == HdrOutputPolicy.EXPERIMENTAL_PQ_TEXTURE &&
+                !supports_experimental_gpu_next_embedding ()) {
+                throw new MediaError.UNSUPPORTED (
+                    "PQ embedding requires the opt-in patched gpu-next libmpv build"
+                );
+            }
+            active_color_output_target = options.hdr_policy ==
+                HdrOutputPolicy.EXPERIMENTAL_PQ_TEXTURE
+                ? ColorOutputTarget.EXPERIMENTAL_BT2020_PQ
+                : ColorOutputTarget.SDR_BT709_BT1886;
             uint64 generation = ++request_generation;
             active_passthrough = options.audio_policy == AudioOutputPolicy.PREFER_PASSTHROUGH;
             active_passthrough_device_id = active_passthrough ? options.audio_device_id : "";
@@ -437,6 +453,11 @@ namespace MediaKit {
 
         /** Creates a GL output endpoint for an already initialized active backend. */
         public OpenGlOutput create_opengl_output () throws Error {
+            if (color_output_target != ColorOutputTarget.SDR_BT709_BT1886) {
+                throw new MediaError.UNSUPPORTED (
+                    "PQ output cannot be presented by the standard SDR GtkGLArea"
+                );
+            }
             return backend.create_opengl_output ();
         }
 
@@ -459,6 +480,7 @@ namespace MediaKit {
             backend = new UnavailableBackend ();
             attach_backend ();
             source = null;
+            active_color_output_target = ColorOutputTarget.SDR_BT709_BT1886;
             active_passthrough = false;
             active_passthrough_device_id = "";
             output_changed ();

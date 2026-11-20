@@ -60,6 +60,25 @@ MediaKitEngine *mediakit_engine_new_with_audio_and_video(const gchar *device_id,
                                                          const gchar *tone_mapping,
                                                          gboolean deband);
 
+/** mediakit_engine_new_with_video_target:
+ * @device_id: Audio endpoint ID or auto.
+ * @codecs: Validated audio passthrough allowlist.
+ * @pcm_channels: Selected decoded PCM channel policy.
+ * @tone_mapping: Validated mpv tone-map setting.
+ * @deband: Enable bounded GPU debanding.
+ * @experimental_pq: Request BT.2020/PQ rendering with a patched gpu-next GL API.
+ *
+ * The PQ option is rejected by the build without an experimental backend. It
+ * configures texture pixels only, not Wayland HDR transport or monitor scanout.
+ * Returns: (transfer full): New engine; opening fails when unavailable.
+ */
+MediaKitEngine *mediakit_engine_new_with_video_target(const gchar *device_id,
+                                                       const gchar *codecs,
+                                                       const gchar *pcm_channels,
+                                                       const gchar *tone_mapping,
+                                                       gboolean deband,
+                                                       gboolean experimental_pq);
+
 /** mediakit_engine_get_audio_information:
  * @self: Operational playback engine.
  *

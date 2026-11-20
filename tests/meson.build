@@ -35,6 +35,21 @@ if get_option('gtk')
   )
 endif
 
+if experimental_gtk_pq
+  hdr_widget_test = executable(
+    'test-gtk-hdr-contract',
+    'integration/gtk-hdr-contract.vala',
+    dependencies: [gtk_api],
+  )
+  test(
+    'media-gtk-hdr-contract',
+    hdr_widget_test,
+    suite: 'integration',
+    env: ['GDK_BACKEND=headless'],
+    timeout: 30,
+  )
+endif
+
 if mpv.found()
   metadata_test = executable(
     'test-engine-metadata',

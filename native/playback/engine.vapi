@@ -28,6 +28,12 @@ namespace MediaKitNative {
                                             string pcm_channels, string tone_mapping,
                                             bool deband);
 
+        /** Initializes a PQ render target only for an opt-in patched gpu-next build. */
+        [CCode (cname = "mediakit_engine_new_with_video_target")]
+        public Engine.with_video_target (string device_id, string codecs,
+                                         string pcm_channels, string tone_mapping,
+                                         bool deband, bool experimental_pq);
+
         /** Resolves after an actual native file-loaded or error event. */
         public async bool load_async (string uri, GLib.Cancellable? cancellable = null)
                                       throws GLib.Error;

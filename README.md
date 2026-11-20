@@ -1,6 +1,6 @@
 # Majoris Media
 
-**Version:** 0.7.3 (Stage 7 advanced playback control and honest HDR capability reporting) · **API namespaces:** `MediaKit-1.0`,
+**Version:** 0.7.4 (Stage 7 optional color-tagged PQ GTK video path) · **API namespaces:** `MediaKit-1.0`,
 `MediaKitGtk-1.0` · **Platform:** Majoris OS / Debian 13 · **License:** GPL-3.0-or-later
 
 Majoris Media is a reusable audio/video playback foundation for Majoris applications.
@@ -10,7 +10,7 @@ libmpv, and a **GtkGLArea**-attached OpenGL renderer. Applications retain owners
 windows, playlists, toolbars, persistent settings, and fullscreen policy.
 
 > **Verification status:** This is source implementation, not a validated release.
-> Stage 7.2 static checks passed, but Vala, Meson, libmpv and GTK4 development
+> Stage 7.4 static checks passed, but Vala, Meson, libmpv and GTK4 development
 > packages were unavailable in the authoring environment. Native compilation,
 > runtime playback, GTK rendering, ICC processing and hardware output are
 > **not verified**.
@@ -52,6 +52,7 @@ windows, playlists, toolbars, persistent settings, and fullscreen policy.
 | Renderer quality | Opt-in bounded debanding, default balanced |
 | Framebuffer telemetry | GL RGB bit depth and render dithering depth measured on active framebuffer; no HDR output inference |
 | Embedded gpu-next | Default: stable legacy OpenGL. Optional patched-libmpv draft backend is strictly opt-in; unverified native HDR |
+| Optional HDR GTK texture view | Opt-in `HdrMediaView` renders float OpenGL frames as GDK BT.2100/PQ textures, requiring patched libmpv; monitor HDR still unverified |
 | Standalone gpu-next Wayland | Optional separately windowed mpv 0.42+ process, private JSON IPC, ready-state handshake, pause/seek/query and cleanup; not embedded into GTK |
 | Advanced display negotiation | mpv native Wayland `gpu-next`, source/target hint modes, ST 2094-40 / ST 2094-10 internal tone maps; actual output must be tested |
 | GPU-next FEL reconstruction | Upstream renderer can attempt it; not proven by executable version or this library |
@@ -72,6 +73,38 @@ windows, playlists, toolbars, persistent settings, and fullscreen policy.
 packages; missing dependencies stop configuration rather than silently generating a
 non-playing release. An intentionally non-playing build can use `-Dmpv=disabled`
 for API development and headless testing.
+
+## Stage 7.4 — experimental embedded PQ texture output
+
+A new opt-in `MediaKitGtk.HdrMediaView` constructs a floating-point RGBA16F
+OpenGL framebuffer and submits frames through `GdkGLTextureBuilder`, labeling
+the output as **BT.2100 PQ**. Unlike `GtkGLArea`, this explicitly supplies a
+GDK color state to GTK. This removes an important blocker for *attempting*
+GTK-native HDR presentation without implementing a second media decoder.
+
+The widget only builds with **both** of these Meson options enabled:
+
+```sh
+-Dexperimental_embedded_gpu_next=true -Dexperimental_gtk_pq=true
+```
+
+The first requires matching **patched** libmpv headers and runtime based on
+the draft `MPV_RENDER_PARAM_BACKEND` interface; the second enables a separate
+GTK widget and GL bridge. Stock Debian builds continue to use the existing
+SDR widget and do **not** require the patch.
+
+Applications must create a new session with
+`PlaybackOptions.hdr_policy = HdrOutputPolicy.EXPERIMENTAL_PQ_TEXTURE` and bind
+it to `HdrMediaView`. The native engine then requests BT.2020/PQ output, and
+`MediaView` refuses to show those PQ frames as mislabeled SDR. The older
+`PREFER_NATIVE` policy continues to reject unverified native HDR requests.
+The new widget reports `pq_texture_submitted` only for a completed color-tagged
+frame; its `presentation` remains **UNVERIFIED**, not `NATIVE_HDR`.
+
+This stage **does not** prove native HDR scanout, Dolby Vision Profile 7 FEL
+accuracy, or display-link HDR10+ dynamic metadata signaling. Compositor,
+output, patched renderer and licensed reference-media qualification remain
+necessary. See [Stage 7.4 verification](docs/verification-stage7-pq.md).
 
 ## Stage 7.3 — experimental embedded gpu-next compatibility
 
