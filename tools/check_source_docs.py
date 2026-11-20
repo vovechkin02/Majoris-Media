@@ -7,8 +7,10 @@ import re
 ROOT = Path(__file__).resolve().parents[1]
 ACCESS = re.compile(r"^\s*(?:public|protected|private|internal)\s+")
 SPECIAL = re.compile(r"^\s*(?:static\s+)?construct\s*\{|^\s*int\s+main\s*\(")
-C_FUNCTION = re.compile(r"^\s*(?:static\s+)?(?:void|gboolean|const gchar\s*\*|gint|"
-                        r"MediaKitEngine\s*\*|MediaKitRenderer\s*\*)\s*$")
+C_FUNCTION = re.compile(r"^\s*(?:static\s+)?(?:void|gboolean|gint|"
+                        r"const\s+gchar\s*\*|gchar\s*\*|GVariant\s*\*|"
+                        r"const\s+mpv_node\s*\*|MediaKitEngine\s*\*|"
+                        r"MediaKitRenderer\s*\*)\s*$")
 
 
 def is_declaration(line: str) -> bool:

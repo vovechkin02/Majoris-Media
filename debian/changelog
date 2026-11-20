@@ -1,3 +1,12 @@
+majoris-media (0.3.0-1) unstable; urgency=medium
+
+  * Discover and select video, audio and subtitle streams through libmpv.
+  * Expose chapter models/navigation and subtitle visibility controls.
+  * Observe buffer underruns, seeking and active video decoder status.
+  * Add GTK4 stream/chapter menus and a focused multistream regression fixture.
+
+ -- Majoris Maintainers <maintainers@invalid.example>  Fri, 20 Nov 2026 16:03:00 +1100
+
 majoris-media (0.2.0-1) unstable; urgency=medium
 
   * Implement libmpv session engine with asynchronous open and playback control.

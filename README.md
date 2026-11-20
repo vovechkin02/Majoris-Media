@@ -1,6 +1,6 @@
 # Majoris Media
 
-**Version:** 0.2.0 (Stage 2 playback prototype) · **API namespaces:** `MediaKit-1.0`,
+**Version:** 0.3.0 (Stage 3 playback completeness) · **API namespaces:** `MediaKit-1.0`,
 `MediaKitGtk-1.0` · **Platform:** Majoris OS / Debian 13 · **License:** GPL-3.0-or-later
 
 Majoris Media is a reusable audio/video playback foundation for Majoris applications.
@@ -10,9 +10,10 @@ libmpv, and a **GtkGLArea**-attached OpenGL renderer. Applications retain owners
 windows, playlists, toolbars, persistent settings, and fullscreen policy.
 
 > **Verification status:** This is source implementation, not a validated release.
-> Stage 2 static checks passed, but a native compiler, Vala, mpv and GTK4 SDKs were
-> unavailable in the authoring environment. Build, libmpv loading, GPU rendering,
-> and hardware outputs MUST be verified on a Debian target before ISO integration.
+> Stage 3 static checks passed, but Vala, Meson, libmpv and GTK4 development
+> packages were unavailable in the authoring environment. Native compilation,
+> runtime playback, GTK rendering and hardware output are **not verified**.
+> Build and run the tests on Debian before integrating this into the ISO.
 
 ## Contents
 
@@ -29,19 +30,23 @@ windows, playlists, toolbars, persistent settings, and fullscreen policy.
 
 ## Current implementation
 
-| Area | Stage 2 status |
+| Area | Stage 3 status |
 | --- | --- |
 | Local file and HTTP(S) source identity | Implemented; scheme validated before playback |
 | Per-session native engine | libmpv adapter implemented; independent handles |
 | Asynchronous opening | Complete only on actual libmpv `FILE_LOADED` or failure |
 | Cancellation / replacing a source | Cancellable native task and request-generation gating |
 | Play / pause / stop / seek | Native commands; times in signed 64-bit microseconds |
-| Playback events | End-of-file, error, pause, duration and position |
+| Playback events | EOF, terminal errors, operation errors, pause, position, duration |
 | GTK video | OpenGL rendering through `GtkGLArea` and libmpv render API |
-| GTK transport | Play/pause, stop, seek slider and time labels |
+| GTK transport | Play/pause, stop, seek, time, Video/Audio/Subtitles/Chapters menus |
 | GTK templates | All widget layout in `.ui` XML resources |
-| Track/chapter discovery | API structures only; enumeration postponed to Stage 3 |
-| Media probe | API reserved; still reports unavailable |
+| Track/chapter discovery | Live `GListModel` snapshots from typed libmpv properties |
+| Track/subtitle selection | Video, audio, subtitle ID, subtitle off and visibility toggles |
+| Chapter navigation | Indexed chapters and actual current chapter observation |
+| Buffering and seek state | Cache pause, percentage, seeking and engine events |
+| Video decoder status | Observed `hwdec-current`, including software fallback |
+| Media probe | Standalone probe API reserved; still reports unavailable |
 | HDR / Atmos / DTS:X | Not qualified; output capabilities explicitly unverified |
 | Blu-ray navigation | Not implemented; dedicated later stage |
 
@@ -54,14 +59,15 @@ for API development and headless testing.
 
 Decoding capability is supplied by the installed libmpv build and its FFmpeg
 libraries. **No blanket format/codec or hardware-decoding guarantee is made.**
-Stage 2 has a small PCM WAV fixture for a focused smoke test, not a complete
-format qualification matrix. Source HDR signaling is not equivalent to native
+Stage 3 includes a PCM WAV smoke fixture plus a tiny generated MKV with two
+PCM audio tracks, one MPEG-4 video track, subtitles and two chapters. This is
+not a complete format qualification matrix. Source HDR signaling is not equivalent to native
 HDR output; Atmos/DTS:X sources do not guarantee object-audio rendering or
 encoded receiver passthrough. Read [formats](docs/formats.md).
 
 ## Dependencies and building
 
-Required with Stage 2 default options:
+Required with Stage 3 default options:
 
 - Meson >=1.4, Ninja, `valac`, C compiler, GLib/GIO >=2.76.
 - `libmpv-dev` and `libepoxy-dev` for the native engine and GL resolver.
@@ -122,6 +128,24 @@ try {
 }
 ```
 
+Stage 3 track selection after a successful open:
+
+```vala
+for (uint index = 0; index < session.tracks.get_n_items (); index++) {
+    var track = (MediaKit.MediaTrack) session.tracks.get_item (index);
+    if (track.kind == MediaKit.TrackKind.AUDIO && !track.selected) {
+        session.select_audio_track (track.id);
+        break;
+    }
+}
+
+session.set_subtitles_visible (true);
+```
+
+`select_audio_track()` queues a request; inspect `tracks_changed` or the model
+for the actual engine-selected track. Use `operation_failed` for asynchronously
+rejected controls. Subtitle track selection and visibility are separate.
+
 Run `build/examples/majoris-media-demo` under a graphical session for the
 interactive Open Media file picker. Rendering works with one active GTK view
 per `MediaSession` (libmpv supports only one render context per core).
@@ -131,13 +155,16 @@ per `MediaSession` (libmpv supports only one render context per core).
 - `MediaKit.MediaSource` accepts local paths and file/HTTP(S) URIs.
 - `MediaKit.MediaSession` owns open/close, play/pause/stop/seek, observable state,
   `position_us`, `duration_us`, `state_changed`, `position_changed`,
-  `duration_changed` and `output_changed`.
+  `duration_changed` and `output_changed`. Its live read-only `tracks` and
+  `chapters` models expose stream selection, chapter navigation and subtitles.
 - `MediaKit.OpenGlOutput` is a GTK-independent GL presentation endpoint. Only
   create/render/release it with the host OpenGL context current.
-- `MediaKit.MediaProbe`, metadata/track/chapter objects and playback policies
-  preserve the Stage 1 API shapes; advanced probing is not implemented.
+- `MediaKit.MediaTrack` includes ID, kind, codec, language, title, selection and
+  source flags; `MediaChapter` includes timestamp and title. `MediaProbe` still
+  lacks a standalone inspection implementation; output policy remains advisory.
 - `MediaKitGtk.MediaView` embeds the video GL renderer; `MediaKitGtk.MediaControls`
-  supplies optional neutral controls. See [API details](docs/api.md).
+  supplies optional transport, track, subtitle and chapter controls. See
+  [API details](docs/api.md).
 
 ## Architecture and source layout
 
@@ -154,7 +181,7 @@ contains focused Core, GTK, and native-engine smoke tests. See
 - The Core remains GTK-free. GTK frame rendering occurs only with a current
   GL context. Sources and engine instances do not share mutable global state.
 - Arbitrary media is untrusted. libmpv/FFmpeg are native decoders operating in
-  process, **not** sandboxed decoder workers in Stage 2. No security isolation
+  process, **not** sandboxed decoder workers in Stage 3. No security isolation
   against malicious codecs/containers is claimed.
 - HTTP(S) URLs can initiate network traffic and access remote resources.
   Callers should impose their own trust policy and sandbox/process isolation.
@@ -168,10 +195,11 @@ contains focused Core, GTK, and native-engine smoke tests. See
 
 ## Testing and qualification
 
-The fixture-based native smoke test opens a short PCM WAV and exercises playback
-controls. Source validation, cancellation and GTK session binding are tested
-separately. See [testing](docs/TESTING.md) and the precise
-[Stage 2 verification report](docs/verification-stage2.md). No benchmarks are
+The native smoke test opens a short PCM WAV; a separate representative generated
+MKV exercises live track/chapter discovery and track/visibility controls.
+Source validation, cancellation and GTK session binding are covered separately.
+See [testing](docs/TESTING.md) and the precise
+[Stage 3 verification report](docs/verification-stage3.md). No benchmarks are
 claimed; hardware decoding, 4K, HDR and receiver passthrough need target
 hardware qualification.
 

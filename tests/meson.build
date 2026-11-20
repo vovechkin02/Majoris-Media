@@ -36,6 +36,19 @@ if get_option('gtk')
 endif
 
 if mpv.found()
+  metadata_test = executable(
+    'test-engine-metadata',
+    'integration/engine-metadata.vala',
+    dependencies: [core_api],
+  )
+  test(
+    'media-engine-metadata',
+    metadata_test,
+    args: [meson.current_source_dir() / 'fixtures/multi-stream.mkv'],
+    suite: 'integration',
+    timeout: 15,
+  )
+
   playback_test = executable(
     'test-engine-playback',
     'integration/engine-playback.vala',

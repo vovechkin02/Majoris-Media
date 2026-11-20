@@ -16,8 +16,21 @@ namespace MediaKitGtk {
                 disconnect_session ();
                 current_session = value;
                 if (current_session != null) {
-                    state_handler_id = current_session.state_changed.connect (on_state_changed);
-                    output_handler_id = current_session.output_changed.connect (on_output_changed);
+                    weak MediaView weak_owner = this;
+                    state_handler_id = current_session.state_changed.connect ((state) => {
+                        weak_owner?.on_state_changed (state);
+                    });
+                    output_handler_id = current_session.output_changed.connect (() => {
+                        weak_owner?.on_output_changed ();
+                    });
+                    tracks_handler_id = current_session.tracks_changed.connect (() => {
+                        weak_owner?.update_status ();
+                    });
+                    buffering_handler_id = current_session.buffering_changed.connect (
+                        (active, percent) => {
+                            weak_owner?.update_status ();
+                        }
+                    );
                 }
                 setup_renderer ();
                 update_status ();
@@ -47,6 +60,12 @@ namespace MediaKitGtk {
         /** Session render-target invalidation signal subscription. */
         private ulong output_handler_id = 0;
 
+        /** Tracks changes that distinguish video and audio-only streams. */
+        private ulong tracks_handler_id = 0;
+
+        /** Buffering-state subscription for an accurate in-widget overlay. */
+        private ulong buffering_handler_id = 0;
+
         /** Native frame-update signal subscription. */
         private ulong frame_handler_id = 0;
 
@@ -58,10 +77,15 @@ namespace MediaKitGtk {
         /** Subscribes to GL context lifecycle and registers the frame draw callback. */
         construct {
             render_area.set_auto_render (false);
-            render_area.realize.connect (on_realize);
-            render_area.unrealize.connect (on_unrealize);
+            weak MediaView weak_owner = this;
+            render_area.realize.connect (() => {
+                weak_owner?.on_realize ();
+            });
+            render_area.unrealize.connect (() => {
+                weak_owner?.on_unrealize ();
+            });
             render_area.render.connect ((context) => {
-                return render_frame ();
+                return weak_owner == null || weak_owner.render_frame ();
             });
             update_status ();
         }
@@ -106,8 +130,11 @@ namespace MediaKitGtk {
             try {
                 output = current_session.create_opengl_output ();
                 render_failure = null;
+                weak MediaView weak_owner = this;
                 frame_handler_id = output.update_requested.connect (() => {
-                    render_area.queue_render ();
+                    if (weak_owner != null) {
+                        weak_owner.render_area.queue_render ();
+                    }
                 });
                 render_area.queue_render ();
             } catch (Error error) {
@@ -163,6 +190,46 @@ namespace MediaKitGtk {
                 status_label.visible = true;
                 return;
             }
+            if (current_session.state == MediaKit.PlaybackState.ERROR) {
+                status_label.label = current_session.last_error ?? "Media playback failed";
+                status_label.visible = true;
+                return;
+            }
+            if (current_session.is_buffering) {
+                int percent = current_session.buffering_percent;
+                status_label.label = percent < 0 ? "Buffering…"
+                    : "Buffering… %d%%".printf (percent);
+                status_label.visible = true;
+                return;
+            }
+            bool has_video = false;
+            for (uint index = 0; index < current_session.tracks.get_n_items (); index++) {
+                var track = (MediaKit.MediaTrack) current_session.tracks.get_item (index);
+                if (track.kind == MediaKit.TrackKind.VIDEO && track.selected) {
+                    has_video = true;
+                    break;
+                }
+            }
+            if (!has_video && current_session.state != MediaKit.PlaybackState.OPENING &&
+                current_session.state != MediaKit.PlaybackState.EMPTY &&
+                current_session.state != MediaKit.PlaybackState.ERROR) {
+                switch (current_session.state) {
+                case MediaKit.PlaybackState.PAUSED:
+                    status_label.label = "Audio paused";
+                    break;
+                case MediaKit.PlaybackState.ENDED:
+                    status_label.label = "Audio playback ended";
+                    break;
+                case MediaKit.PlaybackState.STOPPED:
+                    status_label.label = "Audio stopped";
+                    break;
+                default:
+                    status_label.label = "Audio playback";
+                    break;
+                }
+                status_label.visible = true;
+                return;
+            }
             if (render_failure != null) {
                 status_label.label = render_failure;
                 status_label.visible = true;
@@ -198,6 +265,14 @@ namespace MediaKitGtk {
                 if (output_handler_id != 0) {
                     SignalHandler.disconnect (current_session, output_handler_id);
                     output_handler_id = 0;
+                }
+                if (tracks_handler_id != 0) {
+                    SignalHandler.disconnect (current_session, tracks_handler_id);
+                    tracks_handler_id = 0;
+                }
+                if (buffering_handler_id != 0) {
+                    SignalHandler.disconnect (current_session, buffering_handler_id);
+                    buffering_handler_id = 0;
                 }
             }
             current_session = null;

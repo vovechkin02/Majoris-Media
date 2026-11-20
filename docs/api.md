@@ -1,21 +1,21 @@
-# Public API and operation contracts — Stage 2 (0.2.0)
+# Public API and operation contracts — Stage 3 (0.3.0)
 
 ## Stability and types
 
 Public namespaces remain `MediaKit-1.0` and `MediaKitGtk-1.0`; SONAME 0 is
-pre-release. Version 0.2.0 is not an ABI-stable production release.
+pre-release. Version 0.3.0 is not an ABI-stable production release.
 
-| Type | Role | Behavior in Stage 2 |
+| Type | Role | Behavior in Stage 3 |
 | --- | --- | --- |
 | `MediaSource` | Local path or file/HTTP(S) URI | Construction does not touch disk/network |
-| `MediaSession` | Per-source playback Facade | Async load, play/pause, stop, seek, EOF, error and time events |
+| `MediaSession` | Per-source playback Facade | Async load, transport, track/chapter control, seek, EOF, errors and buffering |
 | `OpenGlOutput` | GL renderer endpoint | One active renderer per engine, GL-context-affine |
 | `MediaCapabilities` | Verified/unknown output state | Engine availability from build; HDR/audio output unverified |
 | `MediaProbe` | Future async media inspection | Still returns `ENGINE_UNAVAILABLE` |
-| `MediaDescription`, `MediaTrack`, `MediaChapter` | Metadata models | Reserved; not yet populated by decoder |
+| `MediaDescription`, `MediaTrack`, `MediaChapter` | Metadata models | Live per-session tracks/chapters (standalone probe still reserved) |
 | `PlaybackOptions` | Audio/HDR/seek policy | Stored only; unsupported advanced choices not silently enabled |
 | `MediaKitGtk.MediaView` | Video display | GTK GLArea + libmpv embedded OpenGL API |
-| `MediaKitGtk.MediaControls` | Optional controls | Play, pause, stop, position seek |
+| `MediaKitGtk.MediaControls` | Optional controls | Play, pause, stop, seek, video/audio/subtitle selection and chapters |
 
 ## State and events
 
@@ -31,6 +31,31 @@ pre-release. Version 0.2.0 is not an ABI-stable production release.
 - `position_us`/`duration_us` are signed int64 microseconds. Duration is zero
   when unknown. `seek(position_us)` rejects negative values. Duration updates
   come from libmpv observations; a source may remain nonseekable.
+- Live `tracks` and `chapters` are read-only GListModel interfaces whose
+  underlying contents are replaced on source/selection metadata updates.
+  Consumers can use the `tracks_changed` and `chapters_changed` signals. Each
+  MediaTrack reports the mpv ID, kind, codec, language, source title, selected,
+  default, forced, and external flags. `selected_track_id(kind)` returns the
+  actually selected ID or null. Selection commands **queue** a libmpv request;
+  the next observed metadata event determines what is selected.
+- `select_audio_track`, `select_video_track`, `select_subtitle_track`,
+  `select_track`, `set_subtitles_visible`, and `select_chapter` reject invalid
+  state and unknown track/chapter references. Null track ID disables that
+  category (including subtitles). Visibility is independent of subtitle ID.
+- `current_chapter_index` is -1 while unknown. Chapter indexes are zero-based,
+  and `select_chapter` uses libmpv's chapter property (not an approximate seek).
+- `is_buffering`, `buffering_percent` (-1 if unknown), and `is_seeking` are
+  independent of the user-facing `PlaybackState`: cache starvation does not
+  mean a user intentionally paused playback. Observers use `buffering_changed`
+  and `seeking_changed`. Buffering percentage represents mpv's cache fill state,
+  not downloaded-file completion.
+- `active_video_decoder` is `""` until observed, `"no"` for software, or the
+  active hardware decoder identifier reported by mpv. The
+  `hardware_decoding_active` Boolean reflects this **observed** value, not the
+  requested `hwdec=auto-safe` policy. No device support is inferred.
+- `operation_failed` reports an asynchronously rejected selection/seek/pause
+  command while preserving playback state. Terminal engine failure continues
+  to transition to `ERROR` and set `last_error`.
 - `output_changed` signals that renderers for the previous engine must be
   detached and new renderers can be created. The UI must not keep an older
   engine's GL context after it receives this event.
@@ -53,7 +78,7 @@ pre-release. Version 0.2.0 is not an ABI-stable production release.
 - Only one renderer is permitted per native engine, per libmpv API design.
 - Widget signal IDs are disconnected before their sessions are replaced.
 - Call all `MediaSession` mutators from its owning GLib context. Cross-thread
-  public remote control is not supported in Stage 2.
+  public remote control is not supported in Stage 3.
 
 ## Errors and capability claims
 

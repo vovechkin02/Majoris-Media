@@ -1,4 +1,4 @@
-# Architecture — Stage 2 (0.2.0)
+# Architecture — Stage 3 (0.3.0)
 
 ## Component and dependency structure
 
@@ -65,8 +65,21 @@ only while bound to a session. All subscriptions are disconnected on rebinding.
 - GTK GLArea unrealization/source replacement must free the render context
   *before* its GL context is destroyed. Rendering on an unrelated thread or
   context is prohibited.
-- Core may be used without GTK for audio, source lifecycle or future probes;
-  video without an initialized GL output is not guaranteed to decode/display.
+- Core may be used without GTK for audio, metadata, source lifecycle or
+  future probes; video without initialized GL output is not guaranteed to
+  decode/display.
+- Metadata is read via the structured libmpv `track-list`/`chapter-list`
+  MPV_FORMAT_NODE contract, copied into typed `aa{sv}` GVariants and mapped
+  to GLib `ListStore` models. Strings are bounded/sanitized and native node
+  allocations released. Each read is bounded to 256 tracks or 1024 chapters.
+- Native `track-list`, `chapter-list`, chapter, subtitle visibility, cache
+  pause, cache percent, seeking and `hwdec-current` observations are delivered
+  on the engine's owning GLib main context, not on libmpv worker threads.
+- Stream, chapter, visibility and seek commands use libmpv asynchronous
+  commands. Immediate queue failure throws; later command failure emits a
+  nonterminal `operation_failed` signal rather than falsely ending playback.
+- `hwdec=auto-safe` may fall back to software. Public decoder observation
+  reports the actual engine choice but does not prove GPU display efficiency.
 
 ## Design patterns and justification
 
@@ -85,9 +98,9 @@ per-frame dynamic dispatch beyond the unavoidable single GL renderer call.
 ## Known limitations and next steps
 
 This prototype has not been compiled or run on Debian in the authoring
-container. It does not provide dedicated media probing, enumerated subtitle
-tracks, playlists, disc navigation, verified hardware decode interop,
-HDR/gpu-next/Dolby Vision Profile 7 FEL output, or HDMI encoded passthrough.
+container. It has live subtitle/track/chapter selection but does not provide
+standalone media probing, playlists, disc navigation, verified hardware decode
+interop, HDR/gpu-next/Dolby Vision Profile 7 FEL output, or HDMI passthrough.
 These require their own implementation and validation stages; see formats.md.
 
 Potential performance work after baseline qualification: move mpv initialization

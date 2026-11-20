@@ -18,9 +18,10 @@ namespace MediaKit {
         internal OpenGlOutput (MediaKitNative.Renderer renderer) {
             Object ();
             this.renderer = renderer;
+            weak OpenGlOutput weak_self = this;
             update_handler_id = renderer.update_requested.connect (() => {
-                if (!detached) {
-                    update_requested ();
+                if (weak_self != null && !weak_self.detached) {
+                    weak_self.update_requested ();
                 }
             });
         }

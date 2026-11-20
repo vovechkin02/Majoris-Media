@@ -41,6 +41,40 @@ private void test_session_contract () {
     assert (session.state == MediaKit.PlaybackState.EMPTY);
 }
 
+/** Empty sessions expose stable read-only models and reject premature controls. */
+private void test_stage3_empty_models () {
+    var session = new MediaKit.MediaSession ();
+    assert (session.tracks.get_n_items () == 0);
+    assert (session.chapters.get_n_items () == 0);
+    assert (session.current_chapter_index == -1);
+    assert (session.buffering_percent == -1);
+    assert (!session.is_buffering);
+    assert (session.subtitles_visible);
+    assert (session.active_video_decoder == "");
+    assert (!session.hardware_decoding_active);
+    bool rejected = false;
+    try {
+        session.select_audio_track ("1");
+    } catch (MediaKit.MediaError.INVALID_ARGUMENT error) {
+        rejected = true;
+    } catch (Error error) {
+        assert_not_reached ();
+    }
+    assert (rejected);
+    rejected = false;
+    try {
+        session.select_chapter (0);
+    } catch (MediaKit.MediaError.INVALID_ARGUMENT error) {
+        rejected = true;
+    } catch (Error error) {
+        assert_not_reached ();
+    }
+    assert (rejected);
+    session.close ();
+    assert (session.tracks.get_n_items () == 0);
+    assert (session.chapters.get_n_items () == 0);
+}
+
 /** Missing files report a real error even with a functional native engine. */
 private void test_open_failure () {
     var loop = new MainLoop ();
@@ -112,6 +146,7 @@ int main (string[] args) {
     Test.add_func ("/media/core/source", test_source_contract);
     Test.add_func ("/media/core/source-rejection", test_source_rejection);
     Test.add_func ("/media/core/initial", test_session_contract);
+    Test.add_func ("/media/core/stage3-empty-models", test_stage3_empty_models);
     Test.add_func ("/media/core/missing-file", test_open_failure);
     Test.add_func ("/media/core/pre-canceled", test_canceled_open);
     return Test.run ();

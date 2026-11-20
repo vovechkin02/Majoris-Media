@@ -90,6 +90,56 @@ gboolean mediakit_engine_seek(MediaKitEngine *self,
                                gint64 position_us,
                                GError **error);
 
+/** mediakit_engine_get_tracks:
+ * @self: Active playback engine.
+ *
+ * Returns: (transfer full): Structured `aa{sv}` track metadata snapshot.
+ * The caller owns the returned variant. An empty array indicates no tracks.
+ */
+GVariant *mediakit_engine_get_tracks(MediaKitEngine *self);
+
+/** mediakit_engine_get_chapters:
+ * @self: Active playback engine.
+ *
+ * Returns: (transfer full): Structured `aa{sv}` chapter metadata snapshot.
+ */
+GVariant *mediakit_engine_get_chapters(MediaKitEngine *self);
+
+/** mediakit_engine_select_track:
+ * @self: Active playback engine.
+ * @kind: One of video, audio or subtitle.
+ * @id: (nullable): Valid decimal track id, or NULL to disable that stream.
+ * @error: (out) (optional): Immediate command-queue failure.
+ *
+ * Returns: TRUE if the selection request was queued (not yet confirmed).
+ */
+gboolean mediakit_engine_select_track(MediaKitEngine *self,
+                                      const gchar *kind,
+                                      const gchar *id,
+                                      GError **error);
+
+/** mediakit_engine_select_chapter:
+ * @self: Active playback engine.
+ * @index: Zero-based chapter index.
+ * @error: (out) (optional): Immediate command-queue failure.
+ *
+ * Returns: TRUE if the chapter navigation command was queued.
+ */
+gboolean mediakit_engine_select_chapter(MediaKitEngine *self,
+                                        guint index,
+                                        GError **error);
+
+/** mediakit_engine_set_subtitles_visible:
+ * @self: Active playback engine.
+ * @visible: Requested subtitle visibility, separate from track selection.
+ * @error: (out) (optional): Immediate command-queue failure.
+ *
+ * Returns: TRUE when the change request was queued.
+ */
+gboolean mediakit_engine_set_subtitles_visible(MediaKitEngine *self,
+                                                gboolean visible,
+                                                GError **error);
+
 /** mediakit_engine_close:
  * @self: Engine whose pending operations must be canceled.
  *

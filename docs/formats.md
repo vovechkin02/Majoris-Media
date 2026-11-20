@@ -1,6 +1,6 @@
-# Playback format targets and qualification — Stage 2
+# Playback format targets and qualification — Stage 3
 
-Stage 2 delegates format selection and decoding to the installed libmpv/FFmpeg
+Stage 3 delegates format selection and decoding to the installed libmpv/FFmpeg
 build. A codec being present upstream does **not** establish hardware decoder,
 GTK render, display HDR, object audio or receiver passthrough support.
 
@@ -24,3 +24,12 @@ configured PipeWire/ALSA. These remain **unverified**.
 Network sources are limited by `MediaSource` to `file`, `http` and `https`.
 M3U8/DASH and other protocol expansion will be addressed with a controlled
 security policy. Commercial disc decryption is not supplied by this library.
+
+## Stage 3 representative test evidence
+
+The generated `multi-stream.mkv` fixture contains MPEG-4 video, two PCM audio
+tracks with English and French language tags, a SubRip subtitle stream and two
+chapters. It exercises list discovery, stream IDs, selection and chapter control
+when run with a real libmpv build. The PCM WAV smoke fixture remains. Neither
+fixture establishes HDR, hardware decoding, encoded passthrough or broad codec
+support.

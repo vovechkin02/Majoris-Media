@@ -45,6 +45,34 @@
       </object>
     </child>
     <child>
+      <object class="GtkMenuButton" id="video_menu">
+        <property name="label">Video</property>
+        <property name="sensitive">False</property>
+        <property name="tooltip-text">Select video stream</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuButton" id="audio_menu">
+        <property name="label">Audio</property>
+        <property name="sensitive">False</property>
+        <property name="tooltip-text">Select audio stream</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuButton" id="subtitle_menu">
+        <property name="label">Subtitles</property>
+        <property name="sensitive">False</property>
+        <property name="tooltip-text">Select and show subtitles</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuButton" id="chapter_menu">
+        <property name="label">Chapters</property>
+        <property name="sensitive">False</property>
+        <property name="tooltip-text">Navigate source chapters</property>
+      </object>
+    </child>
+    <child>
       <object class="GtkLabel" id="status_label">
         <property name="label">00:00 / 00:00</property>
         <property name="xalign">1</property>

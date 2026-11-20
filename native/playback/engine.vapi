@@ -24,6 +24,21 @@ namespace MediaKitNative {
         /** Requests an absolute microsecond seek. */
         public bool seek (int64 position_us) throws GLib.Error;
 
+        /** Returns a structured track-list snapshot, not a human-readable log. */
+        public GLib.Variant get_tracks ();
+
+        /** Returns structured chapter metadata in source order. */
+        public GLib.Variant get_chapters ();
+
+        /** Queues video, audio or subtitle selection, with null meaning off. */
+        public bool select_track (string kind, string? id) throws GLib.Error;
+
+        /** Queues navigation to the specified zero-based chapter. */
+        public bool select_chapter (uint index) throws GLib.Error;
+
+        /** Requests subtitle rendering visibility without losing track selection. */
+        public bool set_subtitles_visible (bool visible) throws GLib.Error;
+
         /** Cancels outstanding operations and stops the active source. */
         public void close ();
 
@@ -44,6 +59,27 @@ namespace MediaKitNative {
 
         /** Delivered when a native duration property changes. */
         public signal void duration_changed (int64 duration_us);
+
+        /** Signals a change in track or chapter metadata or selection. */
+        public signal void metadata_changed ();
+
+        /** Reports cache pause and percent, with -1 meaning unknown. */
+        public signal void buffering_changed (bool active, int percent);
+
+        /** Reports a decoder seek or resynchronization in progress. */
+        public signal void seeking_changed (bool active);
+
+        /** Reports actual selected chapter, -1 when unavailable. */
+        public signal void chapter_changed (int index);
+
+        /** Reports actual subtitle visibility property. */
+        public signal void subtitle_visibility_changed (bool visible);
+
+        /** A nonterminal asynchronous control-command failure. */
+        public signal void operation_failed (string message);
+
+        /** Observed active video hardware decoder, or `no` for software. */
+        public signal void video_decoder_changed (string decoder);
     }
 
     /** Private renderer binding; owning GtkGLArea context is mandatory. */

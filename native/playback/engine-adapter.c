@@ -1,6 +1,8 @@
 #include "engine-adapter.h"
 
+#include <math.h>
 #include <stdint.h>
+#include <string.h>
 #include <stdlib.h>
 
 #ifdef MEDIAKIT_HAVE_MPV
@@ -16,6 +18,13 @@ typedef enum {
     SIGNAL_PAUSE_CHANGED,
     SIGNAL_POSITION_CHANGED,
     SIGNAL_DURATION_CHANGED,
+    SIGNAL_METADATA_CHANGED,
+    SIGNAL_BUFFERING_CHANGED,
+    SIGNAL_SEEKING_CHANGED,
+    SIGNAL_CHAPTER_CHANGED,
+    SIGNAL_SUBTITLE_VISIBILITY_CHANGED,
+    SIGNAL_OPERATION_FAILED,
+    SIGNAL_VIDEO_DECODER_CHANGED,
     SIGNAL_COUNT
 } EngineSignal;
 
@@ -28,6 +37,8 @@ struct _MediaKitEngine {
     GTask *open_task;
     gulong cancel_id;
     gint64 last_position_us;
+    gboolean paused_for_cache;
+    gint buffering_percent;
     gint pending_event_dispatch;
     struct _MediaKitRenderer *active_renderer;
     gboolean closing;
@@ -162,14 +173,27 @@ process_events(gpointer data)
 
         switch (event->event_id) {
         case MPV_EVENT_FILE_LOADED:
+            g_signal_emit(self, engine_signals[SIGNAL_METADATA_CHANGED], 0);
             complete_open(self, NULL);
             break;
         case MPV_EVENT_COMMAND_REPLY:
-            if (self->open_task != NULL && event->reply_userdata == 1 &&
-                event->error < 0) {
-                complete_open(self, g_error_new(G_IO_ERROR, G_IO_ERROR_FAILED,
-                                                "Unable to load media: %s",
-                                                mpv_error_string(event->error)));
+            if (event->error < 0) {
+                if (self->open_task != NULL && event->reply_userdata == 1) {
+                    complete_open(self, g_error_new(G_IO_ERROR, G_IO_ERROR_FAILED,
+                                                    "Unable to load media: %s",
+                                                    mpv_error_string(event->error)));
+                } else if (event->reply_userdata == 31 ||
+                           event->reply_userdata == 33) {
+                    g_signal_emit(self, engine_signals[SIGNAL_OPERATION_FAILED], 0,
+                                  mpv_error_string(event->error));
+                }
+            }
+            break;
+        case MPV_EVENT_SET_PROPERTY_REPLY:
+            if (event->error < 0 && (event->reply_userdata == 32 ||
+                                     event->reply_userdata == 34)) {
+                g_signal_emit(self, engine_signals[SIGNAL_OPERATION_FAILED], 0,
+                              mpv_error_string(event->error));
             }
             break;
         case MPV_EVENT_END_FILE: {
@@ -189,7 +213,16 @@ process_events(gpointer data)
         }
         case MPV_EVENT_PROPERTY_CHANGE: {
             mpv_event_property *property = event->data;
-            if (property == NULL || property->data == NULL) {
+            if (property == NULL) {
+                break;
+            }
+            if (property->format == MPV_FORMAT_NONE &&
+                (g_strcmp0(property->name, "track-list") == 0 ||
+                 g_strcmp0(property->name, "chapter-list") == 0)) {
+                g_signal_emit(self, engine_signals[SIGNAL_METADATA_CHANGED], 0);
+                break;
+            }
+            if (property->data == NULL) {
                 break;
             }
             if (g_strcmp0(property->name, "pause") == 0 &&
@@ -198,10 +231,12 @@ process_events(gpointer data)
                 g_signal_emit(self, engine_signals[SIGNAL_PAUSE_CHANGED], 0, paused);
             } else if (g_strcmp0(property->name, "time-pos") == 0 &&
                        property->format == MPV_FORMAT_DOUBLE) {
-                gint64 position_us = (gint64)(*(double *)property->data * 1000000.0);
-                if (position_us < 0) {
-                    position_us = 0;
+                double seconds = *(double *)property->data;
+                if (!isfinite(seconds) || seconds < 0.0 ||
+                    seconds > (double)G_MAXINT64 / 1000000.0) {
+                    break;
                 }
+                gint64 position_us = (gint64)(seconds * 1000000.0);
                 if (llabs(position_us - self->last_position_us) >= 100000) {
                     self->last_position_us = position_us;
                     g_signal_emit(self, engine_signals[SIGNAL_POSITION_CHANGED], 0,
@@ -209,9 +244,46 @@ process_events(gpointer data)
                 }
             } else if (g_strcmp0(property->name, "duration") == 0 &&
                        property->format == MPV_FORMAT_DOUBLE) {
-                gint64 duration_us = (gint64)(*(double *)property->data * 1000000.0);
+                double seconds = *(double *)property->data;
+                if (!isfinite(seconds) || seconds < 0.0 ||
+                    seconds > (double)G_MAXINT64 / 1000000.0) {
+                    break;
+                }
+                gint64 duration_us = (gint64)(seconds * 1000000.0);
                 g_signal_emit(self, engine_signals[SIGNAL_DURATION_CHANGED], 0,
-                              MAX((gint64)0, duration_us));
+                              duration_us);
+            } else if (g_strcmp0(property->name, "paused-for-cache") == 0 &&
+                       property->format == MPV_FORMAT_FLAG) {
+                self->paused_for_cache = *(int *)property->data != 0;
+                g_signal_emit(self, engine_signals[SIGNAL_BUFFERING_CHANGED], 0,
+                              self->paused_for_cache, self->buffering_percent);
+            } else if (g_strcmp0(property->name, "cache-buffering-state") == 0 &&
+                       property->format == MPV_FORMAT_INT64) {
+                gint64 percent = *(int64_t *)property->data;
+                self->buffering_percent = (gint)CLAMP(percent, 0, 100);
+                g_signal_emit(self, engine_signals[SIGNAL_BUFFERING_CHANGED], 0,
+                              self->paused_for_cache, self->buffering_percent);
+            } else if (g_strcmp0(property->name, "seeking") == 0 &&
+                       property->format == MPV_FORMAT_FLAG) {
+                g_signal_emit(self, engine_signals[SIGNAL_SEEKING_CHANGED], 0,
+                              *(int *)property->data != 0);
+            } else if (g_strcmp0(property->name, "chapter") == 0 &&
+                       property->format == MPV_FORMAT_INT64) {
+                gint64 chapter = *(int64_t *)property->data;
+                if (chapter >= -1 && chapter <= G_MAXINT) {
+                    g_signal_emit(self, engine_signals[SIGNAL_CHAPTER_CHANGED], 0,
+                                  (gint)chapter);
+                }
+            } else if (g_strcmp0(property->name, "sub-visibility") == 0 &&
+                       property->format == MPV_FORMAT_FLAG) {
+                g_signal_emit(self,
+                              engine_signals[SIGNAL_SUBTITLE_VISIBILITY_CHANGED], 0,
+                              *(int *)property->data != 0);
+            } else if (g_strcmp0(property->name, "hwdec-current") == 0 &&
+                       property->format == MPV_FORMAT_STRING) {
+                const char *decoder = *(char **)property->data;
+                g_signal_emit(self, engine_signals[SIGNAL_VIDEO_DECODER_CHANGED], 0,
+                              decoder != NULL ? decoder : "");
             }
             break;
         }
@@ -280,6 +352,7 @@ mediakit_engine_init(MediaKitEngine *self)
 {
     self->context = g_main_context_ref_thread_default();
     self->last_position_us = 0;
+    self->buffering_percent = -1;
 #ifdef MEDIAKIT_HAVE_MPV
     self->player = NULL;
 #endif
@@ -330,6 +403,27 @@ mediakit_engine_class_init(MediaKitEngineClass *klass)
     engine_signals[SIGNAL_DURATION_CHANGED] = g_signal_new("duration-changed",
         G_TYPE_FROM_CLASS(klass), G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL,
         G_TYPE_NONE, 1, G_TYPE_INT64);
+    engine_signals[SIGNAL_METADATA_CHANGED] = g_signal_new("metadata-changed",
+        G_TYPE_FROM_CLASS(klass), G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL,
+        G_TYPE_NONE, 0);
+    engine_signals[SIGNAL_BUFFERING_CHANGED] = g_signal_new("buffering-changed",
+        G_TYPE_FROM_CLASS(klass), G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL,
+        G_TYPE_NONE, 2, G_TYPE_BOOLEAN, G_TYPE_INT);
+    engine_signals[SIGNAL_SEEKING_CHANGED] = g_signal_new("seeking-changed",
+        G_TYPE_FROM_CLASS(klass), G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL,
+        G_TYPE_NONE, 1, G_TYPE_BOOLEAN);
+    engine_signals[SIGNAL_CHAPTER_CHANGED] = g_signal_new("chapter-changed",
+        G_TYPE_FROM_CLASS(klass), G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL,
+        G_TYPE_NONE, 1, G_TYPE_INT);
+    engine_signals[SIGNAL_SUBTITLE_VISIBILITY_CHANGED] = g_signal_new(
+        "subtitle-visibility-changed", G_TYPE_FROM_CLASS(klass),
+        G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL, G_TYPE_NONE, 1, G_TYPE_BOOLEAN);
+    engine_signals[SIGNAL_OPERATION_FAILED] = g_signal_new("operation-failed",
+        G_TYPE_FROM_CLASS(klass), G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL,
+        G_TYPE_NONE, 1, G_TYPE_STRING);
+    engine_signals[SIGNAL_VIDEO_DECODER_CHANGED] = g_signal_new(
+        "video-decoder-changed", G_TYPE_FROM_CLASS(klass), G_SIGNAL_RUN_LAST,
+        0, NULL, NULL, NULL, G_TYPE_NONE, 1, G_TYPE_STRING);
 }
 
 /** Allocates and initializes one libmpv handle without touching video GL resources. */
@@ -357,6 +451,14 @@ mediakit_engine_new(void)
     mpv_observe_property(self->player, 0, "pause", MPV_FORMAT_FLAG);
     mpv_observe_property(self->player, 0, "time-pos", MPV_FORMAT_DOUBLE);
     mpv_observe_property(self->player, 0, "duration", MPV_FORMAT_DOUBLE);
+    mpv_observe_property(self->player, 0, "track-list", MPV_FORMAT_NONE);
+    mpv_observe_property(self->player, 0, "chapter-list", MPV_FORMAT_NONE);
+    mpv_observe_property(self->player, 0, "paused-for-cache", MPV_FORMAT_FLAG);
+    mpv_observe_property(self->player, 0, "cache-buffering-state", MPV_FORMAT_INT64);
+    mpv_observe_property(self->player, 0, "seeking", MPV_FORMAT_FLAG);
+    mpv_observe_property(self->player, 0, "chapter", MPV_FORMAT_INT64);
+    mpv_observe_property(self->player, 0, "sub-visibility", MPV_FORMAT_FLAG);
+    mpv_observe_property(self->player, 0, "hwdec-current", MPV_FORMAT_STRING);
     mpv_set_wakeup_callback(self->player, on_mpv_wakeup, self);
 #endif
     return self;
@@ -435,7 +537,7 @@ set_pause(MediaKitEngine *self, gboolean paused, GError **error)
                             "libmpv is not initialized");
         return FALSE;
     }
-    status = mpv_set_property_async(self->player, 0, "pause", MPV_FORMAT_FLAG, &value);
+    status = mpv_set_property_async(self->player, 34, "pause", MPV_FORMAT_FLAG, &value);
     if (status < 0) {
         set_mpv_error(error, status, "Unable to change playback pause state");
         return FALSE;
@@ -505,7 +607,7 @@ mediakit_engine_seek(MediaKitEngine *self, gint64 position_us, GError **error)
         return FALSE;
     }
     g_ascii_formatd(position, sizeof(position), "%.6f", position_us / 1000000.0);
-    status = mpv_command_async(self->player, 0, command);
+    status = mpv_command_async(self->player, 33, command);
     if (status < 0) {
         set_mpv_error(error, status, "Unable to seek");
         return FALSE;
@@ -516,6 +618,256 @@ mediakit_engine_seek(MediaKitEngine *self, gint64 position_us, GError **error)
                         mediakit_engine_unavailable_reason());
     return FALSE;
 #endif
+}
+
+#ifdef MEDIAKIT_HAVE_MPV
+/** Looks up one named member in an mpv node map without copying its value. */
+static const mpv_node *
+find_node_member(const mpv_node *node, const gchar *key)
+{
+    if (node == NULL || node->format != MPV_FORMAT_NODE_MAP) {
+        return NULL;
+    }
+    for (int index = 0; index < node->u.list->num; index++) {
+        if (g_strcmp0(node->u.list->keys[index], key) == 0) {
+            return &node->u.list->values[index];
+        }
+    }
+    return NULL;
+}
+
+/** Reads optional track and chapter string fields without exposing mpv allocations. */
+static const gchar *
+node_string(const mpv_node *node)
+{
+    return node != NULL && node->format == MPV_FORMAT_STRING &&
+        node->u.string != NULL ? node->u.string : "";
+}
+
+/** Converts potentially malformed source tags into bounded, valid UTF-8. */
+static gchar *
+node_safe_text(const mpv_node *node)
+{
+    const gchar *source = node_string(node);
+    return g_utf8_make_valid(source, strnlen(source, 4096));
+}
+
+/** Reads an mpv flag only when it is explicitly present and type-correct. */
+static gboolean
+node_flag(const mpv_node *node)
+{
+    return node != NULL && node->format == MPV_FORMAT_FLAG && node->u.flag != 0;
+}
+
+/** Converts a source track ID into a stable decimal string for public clients. */
+static gchar *
+node_track_id(const mpv_node *node)
+{
+    if (node == NULL) {
+        return NULL;
+    }
+    if (node->format == MPV_FORMAT_INT64) {
+        return g_strdup_printf("%" G_GINT64_FORMAT, (gint64)node->u.int64);
+    }
+    if (node->format == MPV_FORMAT_STRING) {
+        return g_strndup(node->u.string, 32);
+    }
+    return NULL;
+}
+
+/** Constructs one metadata snapshot in a stable typed GVariant wire contract. */
+static GVariant *
+read_metadata(MediaKitEngine *self, const char *property, gboolean chapters)
+{
+    GVariantBuilder entries;
+    mpv_node root = {0};
+    g_variant_builder_init(&entries, G_VARIANT_TYPE("aa{sv}"));
+    if (self->player == NULL || self->closing ||
+        mpv_get_property(self->player, property, MPV_FORMAT_NODE, &root) < 0) {
+        return g_variant_ref_sink(g_variant_builder_end(&entries));
+    }
+    if (root.format == MPV_FORMAT_NODE_ARRAY) {
+        int count = MIN(root.u.list->num, chapters ? 1024 : 256);
+        for (int index = 0; index < count; index++) {
+            const mpv_node *node = &root.u.list->values[index];
+            GVariantBuilder entry;
+            if (node->format != MPV_FORMAT_NODE_MAP) {
+                continue;
+            }
+            g_variant_builder_init(&entry, G_VARIANT_TYPE_VARDICT);
+            if (chapters) {
+                const mpv_node *time_node = find_node_member(node, "time");
+                double seconds = 0.0;
+                if (time_node != NULL && time_node->format == MPV_FORMAT_DOUBLE) {
+                    seconds = time_node->u.double_;
+                } else if (time_node != NULL && time_node->format == MPV_FORMAT_INT64) {
+                    seconds = (double)time_node->u.int64;
+                }
+                gint64 start_us = 0;
+                if (isfinite(seconds) && seconds > 0.0 &&
+                    seconds < ((double)G_MAXINT64 / 1000000.0)) {
+                    start_us = (gint64)(seconds * 1000000.0);
+                }
+                g_variant_builder_add(&entry, "{sv}", "index",
+                                      g_variant_new_uint32((guint)index));
+                g_variant_builder_add(&entry, "{sv}", "start-us",
+                                      g_variant_new_int64(start_us));
+                gchar *title = node_safe_text(find_node_member(node, "title"));
+                g_variant_builder_add(&entry, "{sv}", "title",
+                                      g_variant_new_string(title));
+                g_free(title);
+            } else {
+                gchar *id = node_track_id(find_node_member(node, "id"));
+                if (id == NULL || *id == '\0') {
+                    g_free(id);
+                    g_variant_builder_clear(&entry);
+                    continue;
+                }
+                g_variant_builder_add(&entry, "{sv}", "id", g_variant_new_string(id));
+                const gchar *names[] = { "type", "codec", "lang", "title", NULL };
+                for (int name_index = 0; names[name_index] != NULL; name_index++) {
+                    const gchar *name = names[name_index];
+                    gchar *safe = node_safe_text(find_node_member(node, name));
+                    g_variant_builder_add(&entry, "{sv}", name,
+                                          g_variant_new_string(safe));
+                    g_free(safe);
+                }
+                const gchar *flags[] = { "selected", "default", "forced", "external", NULL };
+                for (int flag_index = 0; flags[flag_index] != NULL; flag_index++) {
+                    const gchar *name = flags[flag_index];
+                    g_variant_builder_add(&entry, "{sv}", name,
+                        g_variant_new_boolean(node_flag(find_node_member(node, name))));
+                }
+                g_free(id);
+            }
+            g_variant_builder_add_value(&entries, g_variant_builder_end(&entry));
+        }
+    }
+    mpv_free_node_contents(&root);
+    return g_variant_ref_sink(g_variant_builder_end(&entries));
+}
+#endif
+
+/** Returns source tracks as an owned array of typed metadata dictionaries. */
+GVariant *
+mediakit_engine_get_tracks(MediaKitEngine *self)
+{
+    g_return_val_if_fail(MEDIAKIT_IS_ENGINE(self), NULL);
+#ifdef MEDIAKIT_HAVE_MPV
+    return read_metadata(self, "track-list", FALSE);
+#else
+    GVariantBuilder empty;
+    g_variant_builder_init(&empty, G_VARIANT_TYPE("aa{sv}"));
+    return g_variant_ref_sink(g_variant_builder_end(&empty));
+#endif
+}
+
+/** Returns source chapters as an owned array of typed metadata dictionaries. */
+GVariant *
+mediakit_engine_get_chapters(MediaKitEngine *self)
+{
+    g_return_val_if_fail(MEDIAKIT_IS_ENGINE(self), NULL);
+#ifdef MEDIAKIT_HAVE_MPV
+    return read_metadata(self, "chapter-list", TRUE);
+#else
+    GVariantBuilder empty;
+    g_variant_builder_init(&empty, G_VARIANT_TYPE("aa{sv}"));
+    return g_variant_ref_sink(g_variant_builder_end(&empty));
+#endif
+}
+
+/** Queues one validated track selection using libmpv's public property command. */
+gboolean
+mediakit_engine_select_track(MediaKitEngine *self, const gchar *kind,
+                             const gchar *id, GError **error)
+{
+    g_return_val_if_fail(MEDIAKIT_IS_ENGINE(self), FALSE);
+    const gchar *property = NULL;
+    if (g_strcmp0(kind, "video") == 0) {
+        property = "vid";
+    } else if (g_strcmp0(kind, "audio") == 0) {
+        property = "aid";
+    } else if (g_strcmp0(kind, "subtitle") == 0) {
+        property = "sid";
+    } else {
+        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT,
+                            "Unknown track category");
+        return FALSE;
+    }
+    if (id != NULL) {
+        if (*id == '\0' || strlen(id) > 20) {
+            g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT,
+                                "Track ID is empty or too long");
+            return FALSE;
+        }
+        for (const gchar *cursor = id; *cursor != '\0'; cursor++) {
+            if (!g_ascii_isdigit(*cursor)) {
+                g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT,
+                                    "Track ID must be a decimal integer");
+                return FALSE;
+            }
+        }
+    }
+#ifdef MEDIAKIT_HAVE_MPV
+    if (self->player != NULL && !self->closing) {
+        const char *command[] = { "set", property, id != NULL ? id : "no", NULL };
+        int status = mpv_command_async(self->player, 31, command);
+        if (status >= 0) {
+            return TRUE;
+        }
+        set_mpv_error(error, status, "Unable to select media track");
+        return FALSE;
+    }
+#endif
+    g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NOT_INITIALIZED,
+                        "The playback engine is unavailable");
+    return FALSE;
+}
+
+/** Navigates to a zero-based chapter using libmpv's chapter property. */
+gboolean
+mediakit_engine_select_chapter(MediaKitEngine *self, guint index, GError **error)
+{
+    g_return_val_if_fail(MEDIAKIT_IS_ENGINE(self), FALSE);
+#ifdef MEDIAKIT_HAVE_MPV
+    if (self->player != NULL && !self->closing) {
+        gchar chapter[32];
+        g_snprintf(chapter, sizeof(chapter), "%u", index);
+        const char *command[] = { "set", "chapter", chapter, NULL };
+        int status = mpv_command_async(self->player, 31, command);
+        if (status >= 0) {
+            return TRUE;
+        }
+        set_mpv_error(error, status, "Unable to navigate to chapter");
+        return FALSE;
+    }
+#endif
+    g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NOT_INITIALIZED,
+                        "The playback engine is unavailable");
+    return FALSE;
+}
+
+/** Requests renderer subtitle visibility without changing the selected track. */
+gboolean
+mediakit_engine_set_subtitles_visible(MediaKitEngine *self, gboolean visible,
+                                      GError **error)
+{
+    g_return_val_if_fail(MEDIAKIT_IS_ENGINE(self), FALSE);
+#ifdef MEDIAKIT_HAVE_MPV
+    if (self->player != NULL && !self->closing) {
+        int flag = visible ? 1 : 0;
+        int status = mpv_set_property_async(self->player, 32,
+                                            "sub-visibility", MPV_FORMAT_FLAG, &flag);
+        if (status >= 0) {
+            return TRUE;
+        }
+        set_mpv_error(error, status, "Unable to change subtitle visibility");
+        return FALSE;
+    }
+#endif
+    g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NOT_INITIALIZED,
+                        "The playback engine is unavailable");
+    return FALSE;
 }
 
 /** Invalidates pending results and stops a source without destroying the player handle. */

@@ -1,4 +1,4 @@
-# Testing and release qualification — Stage 2
+# Testing and release qualification — Stage 3
 
 ## Focused tests
 
@@ -8,10 +8,14 @@
 | `media-source-structure` | unit | Meson source inventories, XML templates, layering, UTF-8 and whitespace |
 | `media-core-contract` | unit | Valid/rejected URIs, initial states, missing file, pre-canceled load |
 | `media-engine-playback` | integration | Tiny generated WAV, actual `FILE_LOADED`, play, pause, seek, stop, restart |
+| `media-engine-metadata` | integration | Original multistream MKV: track inventory/selection, chapters, subtitle visibility, model reset |
 | `media-gtk-contract` | integration | GTK templates and independent session assignment |
 
 The native audio fixture is `tests/fixtures/short-tone.wav`: 500 ms of 16 kHz
-mono 16-bit PCM. It is intentionally small, original and deterministic.
+mono 16-bit PCM. The second original fixture, `multi-stream.mkv`, is 3 seconds
+with one MPEG-4 video, two PCM audio tracks, one SRT track and two chapters.
+Both fixtures are committed and deterministic; test execution needs no FFmpeg
+CLI installed.
 No HDR, Atmos or large decoder benchmark tests are justified at this stage.
 
 ## Commands
@@ -43,6 +47,6 @@ claims. Test the headless core build separately with `-Dgtk=false`.
    consumer compilation.
 
 The source authoring environment had no valac, meson, GLib/GTK4 or libmpv
-headers and no package download access. Therefore Stage 2 native compilation,
+headers and no package download access. Therefore Stage 3 native compilation,
 GIR generation and runtime tests are **NOT RUN**, not passed. See
-[verification-stage2.md](verification-stage2.md).
+[verification-stage3.md](verification-stage3.md).
