@@ -8,6 +8,20 @@ namespace MediaKitNative {
         [CCode (cname = "mediakit_engine_new")]
         public Engine ();
 
+        /** Initializes libmpv with an explicit audio route and safe codec allowlist. */
+        [CCode (cname = "mediakit_engine_new_with_audio")]
+        public Engine.with_audio (string device_id, string codecs,
+                                  string pcm_channels);
+
+        /** Actual source/decoder and output audio parameters, never receiver capabilities. */
+        public GLib.Variant get_audio_information ();
+
+        /** Enumerated mpv audio output endpoints without advertised codec support. */
+        public GLib.Variant get_audio_devices ();
+
+        /** Requests a new device and reports eventual failure asynchronously. */
+        public bool select_audio_device (string device_id) throws GLib.Error;
+
         /** Resolves after an actual native file-loaded or error event. */
         public async bool load_async (string uri, GLib.Cancellable? cancellable = null)
                                       throws GLib.Error;
@@ -47,6 +61,12 @@ namespace MediaKitNative {
 
         /** Creates one renderer from the current OpenGL context. */
         public Renderer create_renderer () throws GLib.Error;
+
+        /** Delivered when stream or output audio properties change. */
+        public signal void audio_metadata_changed ();
+
+        /** Delivered on changes to the engine's enumerated output devices. */
+        public signal void audio_devices_changed ();
 
         /** Delivered after an observed video color-property change. */
         public signal void color_metadata_changed ();

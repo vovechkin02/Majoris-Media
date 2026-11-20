@@ -29,6 +29,48 @@ const gchar *mediakit_engine_unavailable_reason(void);
  */
 MediaKitEngine *mediakit_engine_new(void);
 
+/** mediakit_engine_new_with_audio:
+ * @device_id: Exact mpv output identifier, or "auto" for system default.
+ * @codecs: Canonical comma-separated user-approved IEC 61937 codecs, or empty.
+ * @pcm_channels: "auto-safe" or explicit source-preferred "auto".
+ *
+ * Configures audio policy before mpv initialization. The caller must validate
+ * codec identifiers and receiver compatibility; a successful configuration
+ * is not proof of physical receiver decoding.
+ * Returns: (transfer full): New native playback engine.
+ */
+MediaKitEngine *mediakit_engine_new_with_audio(const gchar *device_id,
+                                               const gchar *codecs,
+                                               const gchar *pcm_channels);
+
+/** mediakit_engine_get_audio_information:
+ * @self: Operational playback engine.
+ *
+ * Returns: (transfer full): Typed `a{sv}` containing separately observed source
+ * and output properties; missing values remain absent.
+ */
+GVariant *mediakit_engine_get_audio_information(MediaKitEngine *self);
+
+/** mediakit_engine_get_audio_devices:
+ * @self: Operational playback engine.
+ *
+ * Returns: (transfer full): `aa{sv}` device ID and label inventory. No codec
+ * capability is implied by an enumerated output device.
+ */
+GVariant *mediakit_engine_get_audio_devices(MediaKitEngine *self);
+
+/** mediakit_engine_select_audio_device:
+ * @self: Operational playback engine.
+ * @device_id: Exact enumerated mpv device ID or "auto".
+ * @error: (out) (optional): Immediate submission failure.
+ *
+ * Asynchronous rejection is reported via operation-failed.
+ * Returns: TRUE when the device change was queued, not confirmed.
+ */
+gboolean mediakit_engine_select_audio_device(MediaKitEngine *self,
+                                                const gchar *device_id,
+                                                GError **error);
+
 /** mediakit_engine_load_async:
  * @self: Engine for one playback session.
  * @uri: Validated file, HTTP, or HTTPS URI.

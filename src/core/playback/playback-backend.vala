@@ -43,6 +43,21 @@ namespace MediaKit {
         /** Notifies consumers that decoded source color metadata has changed. */
         public signal void color_metadata_changed ();
 
+        /** Source decoder or output-device metadata changed on the main context. */
+        public signal void audio_metadata_changed ();
+
+        /** Output-device inventory was refreshed by the backend. */
+        public signal void audio_devices_changed ();
+
+        /** Reads source and output audio characteristics from the engine. */
+        public abstract Variant get_audio_information () throws Error;
+
+        /** Reads enumerated output devices without assuming receiver codecs. */
+        public abstract Variant get_audio_devices () throws Error;
+
+        /** Requests a selected device; callback observation confirms its actual state. */
+        public abstract void select_audio_device (string id) throws Error;
+
         /** Snapshot of source color metadata, never of a validated display path. */
         public abstract Variant get_video_color () throws Error;
 

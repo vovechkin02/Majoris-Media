@@ -44,6 +44,12 @@ namespace MediaKit {
         /** Active decoder observed directly from libmpv, not the requested policy. */
         public signal void video_decoder_changed (string decoder);
 
+        /** Observed source and active audio output configuration changed. */
+        public signal void audio_metadata_changed ();
+
+        /** Audio output enumeration changed, for example after device hotplug. */
+        public signal void audio_devices_changed ();
+
         /** Notifies the consumer when the libmpv source color metadata changes. */
         public signal void color_metadata_changed ();
 
@@ -57,8 +63,11 @@ namespace MediaKit {
         private bool closed = false;
 
         /** Creates a per-request native engine to isolate superseded load completions. */
-        public MpvBackend () {
-            engine = new MediaKitNative.Engine ();
+        public MpvBackend (PlaybackOptions options) {
+            engine = new MediaKitNative.Engine.with_audio (
+                options.audio_device_id, AudioPolicy.codecs_for_engine (options),
+                AudioPolicy.pcm_channels_for_engine (options)
+            );
             weak MpvBackend weak_self = this;
             handlers += engine.ended.connect (() => {
                 if (weak_self != null && !weak_self.closed) {
@@ -120,6 +129,16 @@ namespace MediaKit {
                     weak_self.video_decoder_changed (decoder);
                 }
             });
+            handlers += engine.audio_metadata_changed.connect (() => {
+                if (weak_self != null && !weak_self.closed) {
+                    weak_self.audio_metadata_changed ();
+                }
+            });
+            handlers += engine.audio_devices_changed.connect (() => {
+                if (weak_self != null && !weak_self.closed) {
+                    weak_self.audio_devices_changed ();
+                }
+            });
             handlers += engine.color_metadata_changed.connect (() => {
                 if (weak_self != null && !weak_self.closed) {
                     weak_self.color_metadata_changed ();
@@ -162,6 +181,24 @@ namespace MediaKit {
         public void seek (int64 position_us) throws Error {
             ensure_open ();
             engine.seek (position_us);
+        }
+
+        /** Returns the engine's source and output audio property snapshot. */
+        public Variant get_audio_information () throws Error {
+            ensure_open ();
+            return engine.get_audio_information ();
+        }
+
+        /** Returns the enumerated device list, preserving native output identifiers. */
+        public Variant get_audio_devices () throws Error {
+            ensure_open ();
+            return engine.get_audio_devices ();
+        }
+
+        /** Queues switching to a different endpoint without changing codec policy. */
+        public void select_audio_device (string id) throws Error {
+            ensure_open ();
+            engine.select_audio_device (id);
         }
 
         /** Copies no frames: obtains a native metadata-only track snapshot. */

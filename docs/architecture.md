@@ -1,4 +1,4 @@
-# Architecture — Stage 4 (0.4.0)
+# Architecture — Stage 5 (0.5.0)
 
 ## Component and dependency structure
 
@@ -133,3 +133,52 @@ Potential performance work after baseline qualification: move mpv initialization
 and teardown off the GTK main thread where measured to block, adopt advanced
 render controls only with correct synchronization, and resolve Wayland/X11 GPU
 interop when specific hardware warrants it. Do not optimize speculatively.
+
+## Stage 5 audio architecture and decision record
+
+- The playback engine (libmpv/FFmpeg) remains solely responsible for decoding,
+  routing, format negotiation, multichannel remixing, audio clocks and transport.
+  MediaKit does not create a separate PipeWire/ALSA stream or encode IEC 61937.
+- `PlaybackOptions` defaults to `AudioOutputPolicy.AUTO`, which safely disables
+  compressed passthrough, and `PcmChannelPolicy.SYSTEM_DEFAULT` (mpv
+  `audio-channels=auto-safe`). `PRESERVE_SOURCE` selects mpv `auto` to prefer the
+  original channel layout; the actual output is read back independently.
+- For `PREFER_PASSTHROUGH`, `AudioPolicy.validate()` requires an explicitly
+  selected audio-device ID and a nonempty, checked flag set representing the
+  receiver's permitted codecs. Input is mapped to a fixed set of mpv
+  `audio-spdif` tokens, not interpolated into commands. All options are applied
+  **before libmpv initialization** so the playback engine has no previously
+  active output with an incompatible policy. Device hotplug and driver fallback
+  cannot become implicit proof of successful IEC 61937 delivery.
+- The current native engine's passthrough device/policy is copied into private
+  `MediaSession` fields; subsequent mutation of `PlaybackOptions` cannot let
+  runtime output switching bypass that receiver binding. A new receiver needs
+  a new session/open with an explicitly approved format set.
+- Native `audio-device-list` yields only device IDs/descriptions. It cannot
+  establish HDMI ELD/EDID, codec availability or supported channel layouts.
+  Actual engine output uses `audio-out-params`, `current-ao`, and `audio-device`.
+  `AudioTransportState.ENCODED_OBSERVED` means only that libmpv reported
+  a compressed transport sample format (e.g. `spdif-truehd`), **not** that an AVR
+  rendered Atmos objects or DTS:X. `MediaCapabilities.encoded_audio` remains
+  `UNVERIFIED` until independent receiver validation exists.
+- Source codec is retrieved from `current-tracks/audio/codec`; decoded audio
+  parameters come from `audio-params`. These are separate snapshots from
+  `audio-out-params`. TrueHD or E-AC-3 is **not** sufficient evidence of
+  Atmos metadata, and DTS-HD is **not** sufficient evidence of DTS:X.
+- Audio property changes and device hotplug notifications are observed via
+  the existing main-context event bridge; no separate audio polling thread,
+  GUI logic or GTK dependence is added to Core. Audio output and device models
+  reset on replacement/close. GTK's output selector has no policy ownership.
+- Choosing PipeWire or ALSA is done through the libmpv output device selected
+  by the caller. It must not be described as automatic, complete hardware codec
+  negotiation: that and actual AVR confirmation are separate qualifications.
+
+**Pattern record:** Audio policy selection is simple validated configuration;
+`AudioPolicy` does not introduce an arbitrary new Strategy/Factory class family.
+The existing PlaybackBackend Strategy and native Adapter remain the only engine
+abstraction, and public GObject signals serve Observer semantics. Options are
+applied outside repeated decoder/sample hot paths.
+
+Reference interfaces: https://mpv.io/manual/stable/ (`audio-spdif`,
+`audio-channels`, `audio-device-list`, `audio-params`, `audio-out-params`);
+https://docs.pipewire.org/group__spa__param.html (IEC 61937 codec format enums).

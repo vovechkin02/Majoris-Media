@@ -59,6 +59,13 @@
       </object>
     </child>
     <child>
+      <object class="GtkMenuButton" id="audio_output_menu">
+        <property name="label">Output</property>
+        <property name="sensitive">False</property>
+        <property name="tooltip-text">Select an audio output device</property>
+      </object>
+    </child>
+    <child>
       <object class="GtkMenuButton" id="subtitle_menu">
         <property name="label">Subtitles</property>
         <property name="sensitive">False</property>

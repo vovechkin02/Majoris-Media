@@ -62,3 +62,25 @@ if mpv.found()
     timeout: 15,
   )
 endif
+
+if mpv.found()
+  audio_test = executable(
+    'test-engine-audio',
+    'integration/engine-audio.vala',
+    dependencies: [core_api],
+  )
+  test(
+    'media-engine-flac-surround',
+    audio_test,
+    args: [meson.current_source_dir() / 'fixtures/surround-5.1.flac', 'flac'],
+    suite: 'integration',
+    timeout: 15,
+  )
+  test(
+    'media-engine-eac3-surround',
+    audio_test,
+    args: [meson.current_source_dir() / 'fixtures/surround-eac3.eac3', 'eac3'],
+    suite: 'integration',
+    timeout: 15,
+  )
+endif

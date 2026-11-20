@@ -1,6 +1,6 @@
 # Majoris Media
 
-**Version:** 0.4.0 (Stage 4 SDR/HDR color foundation) · **API namespaces:** `MediaKit-1.0`,
+**Version:** 0.5.0 (Stage 5 multichannel audio and conservative passthrough) · **API namespaces:** `MediaKit-1.0`,
 `MediaKitGtk-1.0` · **Platform:** Majoris OS / Debian 13 · **License:** GPL-3.0-or-later
 
 Majoris Media is a reusable audio/video playback foundation for Majoris applications.
@@ -10,7 +10,7 @@ libmpv, and a **GtkGLArea**-attached OpenGL renderer. Applications retain owners
 windows, playlists, toolbars, persistent settings, and fullscreen policy.
 
 > **Verification status:** This is source implementation, not a validated release.
-> Stage 4 static checks passed, but Vala, Meson, libmpv and GTK4 development
+> Stage 5 static checks passed, but Vala, Meson, libmpv and GTK4 development
 > packages were unavailable in the authoring environment. Native compilation,
 > runtime playback, GTK rendering, ICC processing and hardware output are
 > **not verified**.
@@ -31,7 +31,7 @@ windows, playlists, toolbars, persistent settings, and fullscreen policy.
 
 ## Current implementation
 
-| Area | Stage 4 status |
+| Area | Stage 5 status |
 | --- | --- |
 | Local file and HTTP(S) source identity | Implemented; scheme validated before playback |
 | Per-session native engine | libmpv adapter implemented; independent handles |
@@ -40,7 +40,7 @@ windows, playlists, toolbars, persistent settings, and fullscreen policy.
 | Play / pause / stop / seek | Native commands; times in signed 64-bit microseconds |
 | Playback events | EOF, terminal errors, operation errors, pause, position, duration |
 | GTK video | OpenGL rendering through `GtkGLArea` and libmpv render API |
-| GTK transport | Play/pause, stop, seek, time, Video/Audio/Subtitles/Chapters menus |
+| GTK transport | Play/pause, stop, seek, time, Video/Audio/Subtitles/Chapters and Output menus |
 | GTK templates | All widget layout in `.ui` XML resources |
 | Track/chapter discovery | Live `GListModel` snapshots from typed libmpv properties |
 | Track/subtitle selection | Video, audio, subtitle ID, subtitle off and visibility toggles |
@@ -52,7 +52,12 @@ windows, playlists, toolbars, persistent settings, and fullscreen policy.
 | Display ICC | Optional caller-provided ICC blob through `mpv_render_context_set_parameter`; profile selection belongs to host |
 | Native HDR policy | `PREFER_NATIVE` rejected until actual GTK/compositor HDR output exists; no false positive |
 | Media probe | Standalone probe API reserved; still reports unavailable |
-| Dolby Vision FEL / native HDR / Atmos / DTS:X | Not qualified; output capabilities explicitly unverified |
+| Audio source and output metadata | Independent `AudioInformation` and `AudioOutputInformation` live snapshots |
+| Multichannel PCM | `PcmChannelPolicy.SYSTEM_DEFAULT` (safe) or `PRESERVE_SOURCE` (source-preferred, device permitting) |
+| Audio output devices | Enumerated libmpv device IDs and optional runtime switching in PCM mode |
+| Compressed passthrough | Explicit endpoint and receiver-approved AC-3, E-AC-3, TrueHD, DTS, DTS-HD allowlist; default is PCM |
+| Physical receiver validation | **Not implemented**; encoded output is an engine observation, not verified Atmos/DTS:X |
+| Dolby Vision FEL / native HDR / Atmos / DTS:X rendering | Not qualified; output capabilities explicitly unverified |
 | Blu-ray navigation | Not implemented; dedicated later stage |
 
 `-Dmpv=enabled` is the default and **requires** libmpv and libepoxy development
@@ -64,7 +69,7 @@ for API development and headless testing.
 
 Decoding capability is supplied by the installed libmpv build and its FFmpeg
 libraries. **No blanket format/codec or hardware-decoding guarantee is made.**
-Stage 4 retains a PCM WAV smoke fixture plus a tiny generated MKV with two
+Stage 5 retains a PCM WAV smoke fixture plus a tiny generated MKV with two
 PCM audio tracks, one MPEG-4 video track, subtitles and two chapters. This is
 not a complete format qualification matrix. Source HDR signaling is not equivalent to native
 HDR output; Atmos/DTS:X sources do not guarantee object-audio rendering or
@@ -72,7 +77,7 @@ encoded receiver passthrough. Read [formats](docs/formats.md).
 
 ## Dependencies and building
 
-Required with Stage 4 default options:
+Required with Stage 5 default options:
 
 - Meson >=1.4, Ninja, `valac`, C compiler, GLib/GIO >=2.76.
 - `libmpv-dev` and `libepoxy-dev` for the native engine and GL resolver.
@@ -151,6 +156,38 @@ session.set_subtitles_visible (true);
 for the actual engine-selected track. Use `operation_failed` for asynchronously
 rejected controls. Subtitle track selection and visibility are separate.
 
+Stage 5 audio output and safe multichannel playback:
+
+```vala
+var options = new MediaKit.PlaybackOptions ();
+options.audio_policy = MediaKit.AudioOutputPolicy.DECODE_PCM;
+options.pcm_channel_policy = MediaKit.PcmChannelPolicy.PRESERVE_SOURCE;
+var session = new MediaKit.MediaSession (options);
+// After open_async() succeeds, inspect session.audio_devices and audio_output.
+// PRESERVE_SOURCE does not guarantee the output hardware preserves that layout.
+```
+
+For encoded HDMI passthrough, select an exact ID actually returned by
+`session.audio_devices` in an earlier PCM session, verify codec support using
+receiver-specific documentation/configuration, and create a fresh session:
+
+```vala
+var options = new MediaKit.PlaybackOptions ();
+options.audio_policy = MediaKit.AudioOutputPolicy.PREFER_PASSTHROUGH;
+options.audio_device_id = selected_device_id;
+options.passthrough_codecs = MediaKit.AudioPassthroughCodec.AC3 |
+    MediaKit.AudioPassthroughCodec.EAC3 |
+    MediaKit.AudioPassthroughCodec.TRUEHD;
+var session = new MediaKit.MediaSession (options);
+```
+
+`selected_device_id` must be the actual identifier previously enumerated;
+**do not** copy arbitrary display names or assume HDMI capabilities from its
+name. `audio_output.transport == ENCODED_OBSERVED` indicates only that libmpv
+reported an IEC 61937 stream. External receiver recognition, Atmos height/object
+rendering and DTS:X are not validated by this API. Device selection does not
+silently carry a codec allowlist to a different device.
+
 Stage 4 source-color inspection after a successful open:
 
 ```vala
@@ -227,7 +264,7 @@ The native smoke test opens a short PCM WAV; a separate representative generated
 MKV exercises live track/chapter discovery and track/visibility controls.
 Source validation, cancellation and GTK session binding are covered separately.
 See [testing](docs/TESTING.md) and the precise
-[Stage 4 verification report](docs/verification-stage4.md). No benchmarks are
+[Stage 5 verification report](docs/verification-stage5.md). No benchmarks are
 claimed; hardware decoding, 4K, HDR and receiver passthrough need target
 hardware qualification.
 

@@ -26,6 +26,28 @@ namespace MediaKit {
         /** Source color/HDR metadata, never proof of a native HDR display pipeline. */
         public VideoColorInformation video_color { get; private set; }
 
+        /** Most recently observed source audio parameters; not a receiver capability. */
+        public AudioInformation source_audio { get; private set; }
+
+        /** Most recently observed output format and device; no AVR handshake implied. */
+        public AudioOutputInformation audio_output { get; private set; }
+
+        /** Available native device IDs, without any inferred codec support. */
+        public ListModel audio_devices {
+            get {
+                return audio_device_store;
+            }
+        }
+
+        /** Emitted when native source audio metadata actually changes. */
+        public signal void source_audio_changed (AudioInformation information);
+
+        /** Emitted when the actual engine-reported output format/device changes. */
+        public signal void audio_output_changed (AudioOutputInformation information);
+
+        /** Emitted when enumerated output devices or their selection changes. */
+        public signal void audio_devices_changed ();
+
         /** Embedded GtkGLArea renders into a defined SDR target, not native HDR. */
         public ColorOutputTarget color_output_target {
             get { return ColorOutputTarget.SDR_BT709_BT1886; }
@@ -114,8 +136,17 @@ namespace MediaKit {
         /** Mutable backing store hidden behind the public read-only chapter model. */
         private ListStore chapter_store;
 
+        /** Owns audio output device inventory, exposed as a read-only ListModel. */
+        private ListStore audio_device_store;
+
         /** Owns backend signal connection identifiers for deterministic disconnection. */
         private ulong[] backend_handlers = {};
+
+        /** Immutable safety decision for the current native engine's passthrough mode. */
+        private bool active_passthrough = false;
+
+        /** Output device approved when this engine was first initialized. */
+        private string active_passthrough_device_id = "";
 
         /** Unique request counter prevents superseded callbacks from mutating state. */
         private uint64 request_generation = 0;
@@ -128,6 +159,9 @@ namespace MediaKit {
             Object (options: options ?? new PlaybackOptions ());
             track_store = new ListStore (typeof (MediaTrack));
             chapter_store = new ListStore (typeof (MediaChapter));
+            audio_device_store = new ListStore (typeof (AudioDevice));
+            source_audio = new AudioInformation ();
+            audio_output = new AudioOutputInformation ();
             video_color = new VideoColorInformation ();
             backend = new UnavailableBackend ();
             attach_backend ();
@@ -141,6 +175,7 @@ namespace MediaKit {
         public async void open_async (MediaSource requested_source,
                                       Cancellable? cancellable = null) throws Error {
             cancellable?.set_error_if_cancelled ();
+            AudioPolicy.validate (options);
             if (options.hdr_policy == HdrOutputPolicy.PREFER_NATIVE) {
                 throw new MediaError.UNSUPPORTED (
                     "Native HDR is unverified in the embedded OpenGL renderer; " +
@@ -148,6 +183,8 @@ namespace MediaKit {
                 );
             }
             uint64 generation = ++request_generation;
+            active_passthrough = options.audio_policy == AudioOutputPolicy.PREFER_PASSTHROUGH;
+            active_passthrough_device_id = active_passthrough ? options.audio_device_id : "";
             cancel_pending ();
             detach_backend ();
             var old_backend = backend;
@@ -182,6 +219,8 @@ namespace MediaKit {
                 }
                 refresh_live_metadata ();
                 refresh_video_color ();
+                refresh_audio_information ();
+                refresh_audio_devices ();
                 update_state (PlaybackState.READY);
             } catch (Error error) {
                 if (generation == request_generation) {
@@ -250,6 +289,33 @@ namespace MediaKit {
                 throw new MediaError.INVALID_ARGUMENT ("No seekable stream is ready");
             }
             backend.seek (position_us);
+        }
+
+        /** Selects an enumerated output endpoint without changing configured codec safety. */
+        public void select_audio_device (string id) throws Error {
+            ensure_media_ready ();
+            if (id == "" || !id.validate ()) {
+                throw new MediaError.INVALID_ARGUMENT ("Invalid output device identifier");
+            }
+            if (active_passthrough && id != active_passthrough_device_id) {
+                throw new MediaError.UNSUPPORTED (
+                    "Changing the passthrough receiver requires reopening with its codecs"
+                );
+            }
+            bool found = id == "auto";
+            for (uint index = 0; index < audio_device_store.get_n_items (); index++) {
+                var device = (AudioDevice) audio_device_store.get_item (index);
+                if (device.id == id) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                throw new MediaError.INVALID_ARGUMENT (
+                    "Audio output device is not in the current enumeration"
+                );
+            }
+            backend.select_audio_device (id);
         }
 
         /** Selects a stream by exact ID, or disables that stream when ID is null. */
@@ -326,6 +392,8 @@ namespace MediaKit {
             backend = new UnavailableBackend ();
             attach_backend ();
             source = null;
+            active_passthrough = false;
+            active_passthrough_device_id = "";
             output_changed ();
             old_backend.close ();
             last_error = null;
@@ -338,9 +406,9 @@ namespace MediaKit {
         }
 
         /** Creates an operational backend only at the source-open boundary. */
-        private static PlaybackBackend create_backend () {
+        private PlaybackBackend create_backend () {
             if (native_engine_is_available ()) {
-                return new MpvBackend ();
+                return new MpvBackend (options);
             }
             return new UnavailableBackend ();
         }
@@ -428,6 +496,18 @@ namespace MediaKit {
                 if (owner != null && owner.source != null) {
                     owner.last_error = message;
                     owner.operation_failed (message);
+                }
+            });
+            backend_handlers += backend.audio_metadata_changed.connect (() => {
+                var owner = weak_self;
+                if (owner != null && owner.source != null) {
+                    owner.refresh_audio_information ();
+                }
+            });
+            backend_handlers += backend.audio_devices_changed.connect (() => {
+                var owner = weak_self;
+                if (owner != null && owner.source != null) {
+                    owner.refresh_audio_devices ();
                 }
             });
             backend_handlers += backend.color_metadata_changed.connect (() => {
@@ -543,11 +623,89 @@ namespace MediaKit {
             }
         }
 
+        /** Updates source and renderer audio metadata without confusing them with an AVR. */
+        private void refresh_audio_information () {
+            try {
+                var metadata = backend.get_audio_information ();
+                var source_snapshot = AudioInformation.from_metadata (metadata);
+                var output_snapshot = AudioOutputInformation.from_metadata (metadata);
+                if (!source_audio.equals_values (source_snapshot)) {
+                    source_audio = source_snapshot;
+                    source_audio_changed (source_snapshot);
+                }
+                if (!audio_output.equals_values (output_snapshot)) {
+                    audio_output = output_snapshot;
+                    audio_output_changed (output_snapshot);
+                    if (audio_device_store.get_n_items () > 0) {
+                        refresh_audio_devices ();
+                    }
+                }
+            } catch (Error error) {
+                warning ("Could not read audio stream/output metadata: %s", error.message);
+            }
+        }
+
+        /** Rebuilds a bounded output-device list from the engine's actual enumeration. */
+        private void refresh_audio_devices () {
+            try {
+                var metadata = backend.get_audio_devices ();
+                var selection = audio_output.device_id;
+                var devices = new ListStore (typeof (AudioDevice));
+                devices.append (new AudioDevice ("auto", "System default", selection == "auto"));
+                for (size_t index = 0; index < metadata.n_children (); index++) {
+                    var item = metadata.get_child_value (index);
+                    string id = read_string (item, "id");
+                    if (id == "" || id == "auto") {
+                        continue;
+                    }
+                    string description = read_string (item, "description");
+                    devices.append (new AudioDevice (
+                        id, description != "" ? description : id, id == selection
+                    ));
+                }
+                bool changed = audio_device_store.get_n_items () != devices.get_n_items ();
+                if (!changed) {
+                    for (uint index = 0; index < devices.get_n_items (); index++) {
+                        var left = (AudioDevice) devices.get_item (index);
+                        var right = (AudioDevice) audio_device_store.get_item (index);
+                        if (left.id != right.id || left.description != right.description ||
+                            left.selected != right.selected) {
+                            changed = true;
+                            break;
+                        }
+                    }
+                }
+                if (changed) {
+                    audio_device_store.remove_all ();
+                    for (uint index = 0; index < devices.get_n_items (); index++) {
+                        audio_device_store.append (devices.get_item (index));
+                    }
+                    audio_devices_changed ();
+                }
+            } catch (Error error) {
+                warning ("Could not enumerate audio output devices: %s", error.message);
+            }
+        }
+
         /** Clears per-source models and engine observation without changing options. */
         private void reset_live_metadata () {
             if (!video_color.equals_values (new VideoColorInformation ())) {
                 video_color = new VideoColorInformation ();
                 video_color_changed (video_color);
+            }
+            var cleared_audio = new AudioInformation ();
+            var cleared_output = new AudioOutputInformation ();
+            if (!source_audio.equals_values (cleared_audio)) {
+                source_audio = cleared_audio;
+                source_audio_changed (source_audio);
+            }
+            if (!audio_output.equals_values (cleared_output)) {
+                audio_output = cleared_output;
+                audio_output_changed (audio_output);
+            }
+            if (audio_device_store.get_n_items () > 0) {
+                audio_device_store.remove_all ();
+                audio_devices_changed ();
             }
             track_store.remove_all ();
             chapter_store.remove_all ();

@@ -227,6 +227,94 @@ private void test_stage4_native_hdr_policy () {
     }
 }
 
+/** Audio source and output are separate and do not imply external spatial rendering. */
+private void test_stage5_audio_metadata () {
+    var native = new VariantBuilder (new VariantType ("a{sv}"));
+    native.add ("{sv}", "source-codec", new Variant.string ("truehd"));
+    native.add ("{sv}", "source-rate", new Variant.int64 (48000));
+    native.add ("{sv}", "source-channels", new Variant.int64 (8));
+    native.add ("{sv}", "source-layout", new Variant.string ("7.1"));
+    native.add ("{sv}", "output-format", new Variant.string ("spdif-truehd"));
+    native.add ("{sv}", "output-rate", new Variant.int64 (192000));
+    native.add ("{sv}", "output-channels", new Variant.int64 (2));
+    native.add ("{sv}", "device", new Variant.string ("alsa/hdmi:CARD=Example,DEV=0"));
+    native.add ("{sv}", "driver", new Variant.string ("alsa"));
+    var metadata = native.end ();
+    var audio = MediaKit.AudioInformation.from_metadata (metadata);
+    var output = MediaKit.AudioOutputInformation.from_metadata (metadata);
+    assert (audio.codec == "truehd");
+    assert (audio.channels == 8);
+    assert (audio.sample_rate_hz == 48000);
+    assert (audio.spatial_format == MediaKit.SpatialAudioFormat.UNKNOWN);
+    assert (output.sample_format == "spdif-truehd");
+    assert (output.transport == MediaKit.AudioTransportState.ENCODED_OBSERVED);
+    assert (output.channels == 2);
+    assert (output.device_id.has_prefix ("alsa/"));
+    var empty = new VariantBuilder (new VariantType ("a{sv}"));
+    var unknown = MediaKit.AudioOutputInformation.from_metadata (empty.end ());
+    assert (unknown.transport == MediaKit.AudioTransportState.UNKNOWN);
+    assert (unknown.driver == "");
+    var pcm = new VariantBuilder (new VariantType ("a{sv}"));
+    pcm.add ("{sv}", "output-format", new Variant.string ("float"));
+    var decoded = MediaKit.AudioOutputInformation.from_metadata (pcm.end ());
+    assert (decoded.transport == MediaKit.AudioTransportState.DECODED_PCM);
+    assert (!decoded.equals_values (output));
+}
+
+/** The empty session cannot enumerate or pretend to choose a physical sink. */
+private void test_stage5_empty_audio () {
+    var session = new MediaKit.MediaSession ();
+    assert (session.audio_devices.get_n_items () == 0);
+    assert (session.source_audio.channels == 0);
+    assert (session.audio_output.transport == MediaKit.AudioTransportState.UNKNOWN);
+    assert (session.capabilities.encoded_audio == MediaKit.CapabilityStatus.UNVERIFIED);
+    bool invalid = false;
+    try {
+        session.select_audio_device ("auto");
+    } catch (MediaKit.MediaError.INVALID_ARGUMENT error) {
+        invalid = true;
+    } catch (Error error) {
+        assert_not_reached ();
+    }
+    assert (invalid);
+}
+
+/** Passthrough must be receiver-approved and bound to a named physical endpoint. */
+private void test_stage5_passthrough_preflight () {
+    var options = new MediaKit.PlaybackOptions ();
+    assert (options.audio_policy == MediaKit.AudioOutputPolicy.AUTO);
+    assert (options.pcm_channel_policy == MediaKit.PcmChannelPolicy.SYSTEM_DEFAULT);
+    assert (options.passthrough_codecs == MediaKit.AudioPassthroughCodec.NONE);
+    options.audio_policy = MediaKit.AudioOutputPolicy.PREFER_PASSTHROUGH;
+    options.passthrough_codecs = MediaKit.AudioPassthroughCodec.AC3 |
+        MediaKit.AudioPassthroughCodec.EAC3;
+    var session = new MediaKit.MediaSession (options);
+    var loop = new MainLoop ();
+    try {
+        var source = new MediaKit.MediaSource.for_path ("/tmp/example-surround.mkv");
+        Idle.add (() => {
+            session.open_async.begin (source, null, (object, result) => {
+                bool rejected = false;
+                try {
+                    session.open_async.end (result);
+                } catch (MediaKit.MediaError.UNSUPPORTED error) {
+                    rejected = true;
+                } catch (Error error) {
+                    assert_not_reached ();
+                }
+                assert (rejected);
+                assert (session.state == MediaKit.PlaybackState.EMPTY);
+                assert (session.source == null);
+                loop.quit ();
+            });
+            return Source.REMOVE;
+        });
+        loop.run ();
+    } catch (Error error) {
+        assert_not_reached ();
+    }
+}
+
 /** Registers small, deterministic public Core API checks. */
 int main (string[] args) {
     Test.init (ref args);
@@ -238,5 +326,8 @@ int main (string[] args) {
     Test.add_func ("/media/core/pre-canceled", test_canceled_open);
     Test.add_func ("/media/core/stage4-color", test_stage4_color_classification);
     Test.add_func ("/media/core/stage4-native-hdr-policy", test_stage4_native_hdr_policy);
+    Test.add_func ("/media/core/stage5-audio-metadata", test_stage5_audio_metadata);
+    Test.add_func ("/media/core/stage5-empty-audio", test_stage5_empty_audio);
+    Test.add_func ("/media/core/stage5-passthrough-preflight", test_stage5_passthrough_preflight);
     return Test.run ();
 }

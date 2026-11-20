@@ -1,4 +1,4 @@
-# Testing and release qualification — Stage 4
+# Testing and release qualification — Stage 5
 
 ## Focused tests
 
@@ -49,6 +49,28 @@ claims. Test the headless core build separately with `-Dgtk=false`.
    consumer compilation.
 
 The source authoring environment had no valac, meson, GLib/GTK4 or libmpv
-headers and no package download access. Therefore Stage 4 native compilation,
+headers and no package download access. Therefore Stage 5 native compilation,
 GIR generation and runtime tests are **NOT RUN**, not passed. See
-[verification-stage4.md](verification-stage4.md).
+[verification-stage5.md](verification-stage5.md).
+
+## Stage 5 audio qualification
+
+- Unit contract tests classify unknown, decoded PCM and engine-observed IEC 61937
+  output separately; TrueHD source metadata never asserts Dolby Atmos.
+- Passthrough policy tests reject the system-default device with a requested
+  codec set **before** a media source is opened. Empty sessions reject device
+  selection and expose no fictitious hardware capabilities.
+- Integration fixtures `surround-5.1.flac` and `surround-eac3.eac3` contain
+  exactly six channels at 48 kHz. Engine source-track recognition is tested when
+  libmpv is compiled in; tests do not require a physical surround receiver.
+- Real-hardware qualification is still required for PipeWire and ALSA:
+  sample-rate negotiation, 2.0/5.1/7.1 PCM, PCM fallback, device unplugging,
+  HDMI ELD formats, AC-3/E-AC-3/TrueHD/DTS/DTS-HD passthrough, sync, audio
+  delay and receiver front-panel codec identification. Atmos/DTS:X object
+  presentation requires appropriate separately licensed test media and an AVR
+  capable of showing the actual decoded/object mode.
+- Never classify a source track codec or `audio-spdif` configuration string
+  as a proven passthrough or spatial-audio qualification result.
+- Native compile/run **not performed** in the authoring container (valac,
+  Meson, GLib/GTK4/libmpv development headers unavailable). See the precise
+  check record in `verification-stage5.md`.

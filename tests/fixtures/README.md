@@ -19,3 +19,12 @@ The fixture is checked into the repository so tests require no runtime FFmpeg
 CLI. It contains no third-party creative media. Use `ffprobe` to inspect stream
 metadata when adding new assertions. These two short samples are **not** a codec,
 HDR, audio passthrough or performance benchmark suite.
+
+Stage 5 adds two original synthetic multichannel references:
+
+- `surround-5.1.flac` — 0.45 seconds, 48 kHz, six-channel 5.1 lossless FLAC.
+- `surround-eac3.eac3` — 0.45 seconds, 48 kHz, six-channel 5.1(side) E-AC-3.
+
+Both were generated with FFmpeg's `anullsrc` and contain silence, no licensed
+content, and no Dolby Atmos or DTS:X object metadata. `ffprobe` metadata
+inspection is not a substitute for encoded HDMI receiver validation.

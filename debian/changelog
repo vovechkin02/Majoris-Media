@@ -1,3 +1,13 @@
+majoris-media (0.5.0-1) unstable; urgency=medium
+
+  * Add typed multichannel source and output audio telemetry and output discovery.
+  * Add safe PCM layouts and explicit receiver-specific Dolby/DTS passthrough allowlist.
+  * Observe actual encoded output separately from receiver and spatial capability.
+  * Provide a GTK output picker and focused 5.1 FLAC/E-AC-3 test samples.
+  * Preserve headless Core isolation and prior public API contracts.
+
+ -- Majoris Maintainers <maintainers@invalid.example>  Fri, 20 Nov 2026 18:50:00 +1100
+
 majoris-media (0.4.0-1) unstable; urgency=medium
 
   * Observe typed source colorimetry, HDR10/HLG/HDR10+ scene metadata and

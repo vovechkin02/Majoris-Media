@@ -29,6 +29,14 @@ namespace MediaKitGtk {
                     tracks_handler_id = current_session.tracks_changed.connect (() => {
                         weak_owner?.update_track_menus ();
                     });
+                    audio_devices_handler_id = current_session.audio_devices_changed.connect (() => {
+                        weak_owner?.update_audio_output_menu ();
+                    });
+                    audio_output_handler_id = current_session.audio_output_changed.connect (
+                        (information) => {
+                            weak_owner?.update_audio_output_menu ();
+                        }
+                    );
                     chapters_handler_id = current_session.chapters_changed.connect (() => {
                         weak_owner?.update_track_menus ();
                     });
@@ -83,6 +91,10 @@ namespace MediaKitGtk {
         [GtkChild]
         private unowned Gtk.MenuButton audio_menu;
 
+        /** Optional output-device chooser, with no implicit bitstream enablement. */
+        [GtkChild]
+        private unowned Gtk.MenuButton audio_output_menu;
+
         /** Subtitle stream/visibility selector. */
         [GtkChild]
         private unowned Gtk.MenuButton subtitle_menu;
@@ -96,6 +108,9 @@ namespace MediaKitGtk {
 
         /** Dynamic audio stream rows. */
         private Gtk.Box audio_list;
+
+        /** Device entries and output status in their neutral GTK popover. */
+        private Gtk.Box audio_output_list;
 
         /** Dynamic subtitle stream and visibility rows. */
         private Gtk.Box subtitle_list;
@@ -117,6 +132,12 @@ namespace MediaKitGtk {
 
         /** Subscription for source stream changes. */
         private ulong tracks_handler_id = 0;
+
+        /** Subscription for discovered audio device updates. */
+        private ulong audio_devices_handler_id = 0;
+
+        /** Subscription for the actual audio output observation. */
+        private ulong audio_output_handler_id = 0;
 
         /** Subscription for chapter-list changes. */
         private ulong chapters_handler_id = 0;
@@ -158,6 +179,7 @@ namespace MediaKitGtk {
             });
             video_list = configure_popover (video_menu);
             audio_list = configure_popover (audio_menu);
+            audio_output_list = configure_popover (audio_output_menu);
             subtitle_list = configure_popover (subtitle_menu);
             chapter_list = configure_popover (chapter_menu);
             update_controls ();
@@ -396,6 +418,62 @@ namespace MediaKitGtk {
             }
         }
 
+        /** Lists output endpoints while retaining honest output/receiver status. */
+        private void update_audio_output_menu () {
+            clear_rows (audio_output_list);
+            audio_output_menu.sensitive = current_session != null &&
+                current_session.source != null &&
+                current_session.state != MediaKit.PlaybackState.OPENING &&
+                current_session.state != MediaKit.PlaybackState.ERROR;
+            if (current_session == null) {
+                return;
+            }
+            var output = current_session.audio_output;
+            string description = "Output not established";
+            switch (output.transport) {
+            case MediaKit.AudioTransportState.DECODED_PCM:
+                description = "Decoded audio output (PCM)";
+                break;
+            case MediaKit.AudioTransportState.ENCODED_OBSERVED:
+                description = "Encoded output observed; receiver unverified";
+                break;
+            default:
+                break;
+            }
+            var status = new Gtk.Label (description);
+            status.set_xalign (0);
+            status.set_wrap (true);
+            audio_output_list.append (status);
+            Gtk.CheckButton? first = null;
+            for (uint index = 0; index < current_session.audio_devices.get_n_items (); index++) {
+                var device = (MediaKit.AudioDevice) current_session.audio_devices.get_item (index);
+                string device_id = device.id;
+                var choice = new Gtk.CheckButton.with_label (device.description);
+                if (first == null) {
+                    first = choice;
+                } else {
+                    choice.set_group (first);
+                }
+                choice.set_active (device.selected);
+                weak Gtk.CheckButton weak_choice = choice;
+                weak MediaControls weak_owner = this;
+                choice.toggled.connect (() => {
+                    var owner = weak_owner;
+                    var selected = weak_choice;
+                    if (owner != null && selected != null && selected.get_active () &&
+                        owner.current_session != null) {
+                        try {
+                            owner.current_session.select_audio_device (device_id);
+                        } catch (Error error) {
+                            owner.status_label.tooltip_text = error.message;
+                            owner.update_audio_output_menu ();
+                        }
+                    }
+                });
+                audio_output_list.append (choice);
+            }
+        }
+
         /** Rebuilds the current source's chapter chooser with accurate selection. */
         private void populate_chapters () {
             clear_rows (chapter_list);
@@ -437,6 +515,7 @@ namespace MediaKitGtk {
         private void update_track_menus () {
             populate_tracks (video_list, MediaKit.TrackKind.VIDEO);
             populate_tracks (audio_list, MediaKit.TrackKind.AUDIO);
+            update_audio_output_menu ();
             populate_tracks (subtitle_list, MediaKit.TrackKind.SUBTITLE);
             populate_chapters ();
             bool ready = current_session != null && current_session.source != null &&
@@ -490,6 +569,14 @@ namespace MediaKitGtk {
                 if (tracks_handler_id != 0) {
                     SignalHandler.disconnect (current_session, tracks_handler_id);
                     tracks_handler_id = 0;
+                }
+                if (audio_devices_handler_id != 0) {
+                    SignalHandler.disconnect (current_session, audio_devices_handler_id);
+                    audio_devices_handler_id = 0;
+                }
+                if (audio_output_handler_id != 0) {
+                    SignalHandler.disconnect (current_session, audio_output_handler_id);
+                    audio_output_handler_id = 0;
                 }
                 if (chapters_handler_id != 0) {
                     SignalHandler.disconnect (current_session, chapters_handler_id);

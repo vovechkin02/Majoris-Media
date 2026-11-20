@@ -44,6 +44,27 @@ namespace MediaKit {
         /** No decoder is available to observe in this backend. */
         public signal void video_decoder_changed (string decoder);
 
+        /** No audio stream or output metadata can be delivered without an engine. */
+        public signal void audio_metadata_changed ();
+
+        /** No available audio device inventory can be enumerated. */
+        public signal void audio_devices_changed ();
+
+        /** Refuses source/output audio metadata access without a backend. */
+        public Variant get_audio_information () throws Error {
+            throw new MediaError.ENGINE_UNAVAILABLE (native_engine_unavailable_reason ());
+        }
+
+        /** Refuses audio output enumeration without an engine. */
+        public Variant get_audio_devices () throws Error {
+            throw new MediaError.ENGINE_UNAVAILABLE (native_engine_unavailable_reason ());
+        }
+
+        /** Refuses audio route changes without an initialized engine. */
+        public void select_audio_device (string id) throws Error {
+            throw new MediaError.ENGINE_UNAVAILABLE (native_engine_unavailable_reason ());
+        }
+
         /** Unavailable engines cannot observe source color information. */
         public signal void color_metadata_changed ();
 

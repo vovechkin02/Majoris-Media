@@ -106,6 +106,41 @@ namespace MediaKit {
         PREFER_PASSTHROUGH
     }
 
+    /** Explicit encoded formats approved for one user-chosen output endpoint. */
+    [Flags]
+    public enum AudioPassthroughCodec {
+        /** Never request compressed IEC 61937 output. */
+        NONE = 0,
+        /** Dolby Digital AC-3 transport. */
+        AC3 = 1 << 0,
+        /** Dolby Digital Plus E-AC-3 transport, possibly with Atmos metadata. */
+        EAC3 = 1 << 1,
+        /** Lossless Dolby TrueHD transport, possibly with Atmos metadata. */
+        TRUEHD = 1 << 2,
+        /** Core DTS compressed transport. */
+        DTS = 1 << 3,
+        /** DTS-HD high-resolution/master-audio transport, potentially containing DTS:X. */
+        DTS_HD = 1 << 4
+    }
+
+    /** Local engine-observed audio path, not external receiver validation. */
+    public enum AudioTransportState {
+        /** No audio output format has yet been observed. */
+        UNKNOWN,
+        /** Decoder produces a non-IEC 61937 audio output format. */
+        DECODED_PCM,
+        /** libmpv reports an encoded IEC 61937 output format. */
+        ENCODED_OBSERVED
+    }
+
+    /** Requested PCM channel layout behavior when the sound device accepts PCM. */
+    public enum PcmChannelPolicy {
+        /** Follow the safe system-preferred layout; may downmix to stereo. */
+        SYSTEM_DEFAULT,
+        /** Prefer the source layout; may be remixed if the endpoint rejects it. */
+        PRESERVE_SOURCE
+    }
+
     /** Selects the desired HDR handling policy, not an output guarantee. */
     public enum HdrOutputPolicy {
         /** Prefer the highest verified appropriate output capability. */

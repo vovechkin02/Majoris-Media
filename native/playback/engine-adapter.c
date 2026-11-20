@@ -26,6 +26,8 @@ typedef enum {
     SIGNAL_OPERATION_FAILED,
     SIGNAL_VIDEO_DECODER_CHANGED,
     SIGNAL_COLOR_METADATA_CHANGED,
+    SIGNAL_AUDIO_METADATA_CHANGED,
+    SIGNAL_AUDIO_DEVICES_CHANGED,
     SIGNAL_COUNT
 } EngineSignal;
 
@@ -176,6 +178,8 @@ process_events(gpointer data)
         case MPV_EVENT_FILE_LOADED:
             g_signal_emit(self, engine_signals[SIGNAL_METADATA_CHANGED], 0);
             g_signal_emit(self, engine_signals[SIGNAL_COLOR_METADATA_CHANGED], 0);
+            g_signal_emit(self, engine_signals[SIGNAL_AUDIO_METADATA_CHANGED], 0);
+            g_signal_emit(self, engine_signals[SIGNAL_AUDIO_DEVICES_CHANGED], 0);
             complete_open(self, NULL);
             break;
         case MPV_EVENT_COMMAND_REPLY:
@@ -193,7 +197,8 @@ process_events(gpointer data)
             break;
         case MPV_EVENT_SET_PROPERTY_REPLY:
             if (event->error < 0 && (event->reply_userdata == 32 ||
-                                     event->reply_userdata == 34)) {
+                                     event->reply_userdata == 34 ||
+                                     event->reply_userdata == 35)) {
                 g_signal_emit(self, engine_signals[SIGNAL_OPERATION_FAILED], 0,
                               mpv_error_string(event->error));
             }
@@ -216,6 +221,20 @@ process_events(gpointer data)
         case MPV_EVENT_PROPERTY_CHANGE: {
             mpv_event_property *property = event->data;
             if (property == NULL) {
+                break;
+            }
+            if (property->format == MPV_FORMAT_NONE &&
+                (g_strcmp0(property->name, "audio-params") == 0 ||
+                 g_strcmp0(property->name, "audio-out-params") == 0 ||
+                 g_strcmp0(property->name, "audio-device") == 0 ||
+                 g_strcmp0(property->name, "current-ao") == 0 ||
+                 g_strcmp0(property->name, "current-tracks/audio/codec") == 0)) {
+                g_signal_emit(self, engine_signals[SIGNAL_AUDIO_METADATA_CHANGED], 0);
+                break;
+            }
+            if (property->format == MPV_FORMAT_NONE &&
+                g_strcmp0(property->name, "audio-device-list") == 0) {
+                g_signal_emit(self, engine_signals[SIGNAL_AUDIO_DEVICES_CHANGED], 0);
                 break;
             }
             if (property->format == MPV_FORMAT_NONE &&
@@ -434,11 +453,18 @@ mediakit_engine_class_init(MediaKitEngineClass *klass)
     engine_signals[SIGNAL_COLOR_METADATA_CHANGED] = g_signal_new(
         "color-metadata-changed", G_TYPE_FROM_CLASS(klass), G_SIGNAL_RUN_LAST,
         0, NULL, NULL, NULL, G_TYPE_NONE, 0);
+    engine_signals[SIGNAL_AUDIO_METADATA_CHANGED] = g_signal_new(
+        "audio-metadata-changed", G_TYPE_FROM_CLASS(klass), G_SIGNAL_RUN_LAST,
+        0, NULL, NULL, NULL, G_TYPE_NONE, 0);
+    engine_signals[SIGNAL_AUDIO_DEVICES_CHANGED] = g_signal_new(
+        "audio-devices-changed", G_TYPE_FROM_CLASS(klass), G_SIGNAL_RUN_LAST,
+        0, NULL, NULL, NULL, G_TYPE_NONE, 0);
 }
 
-/** Allocates and initializes one libmpv handle without touching video GL resources. */
+/** Allocates and initializes libmpv with a fixed audio policy before any media loads. */
 MediaKitEngine *
-mediakit_engine_new(void)
+mediakit_engine_new_with_audio(const gchar *device_id, const gchar *codecs,
+                                const gchar *pcm_channels)
 {
     MediaKitEngine *self = g_object_new(MEDIAKIT_TYPE_ENGINE, NULL);
 #ifdef MEDIAKIT_HAVE_MPV
@@ -452,6 +478,23 @@ mediakit_engine_new(void)
     mpv_set_option_string(self->player, "terminal", "no");
     mpv_set_option_string(self->player, "pause", "yes");
     mpv_set_option_string(self->player, "keep-open", "yes");
+    /* Never allow implicit encoded passthrough: default to decoded PCM.
+     * The caller explicitly selects an endpoint and its allowed codec subset.
+     * This is an application policy, not an HDMI ELD/receiver verification. */
+    status = mpv_set_option_string(self->player, "audio-spdif",
+                                   codecs != NULL ? codecs : "");
+    if (status >= 0) {
+        status = mpv_set_option_string(self->player, "audio-channels",
+                                       pcm_channels != NULL ? pcm_channels : "auto-safe");
+    }
+    if (status >= 0 && device_id != NULL && g_strcmp0(device_id, "auto") != 0) {
+        status = mpv_set_option_string(self->player, "audio-device", device_id);
+    }
+    if (status < 0) {
+        mpv_terminate_destroy(self->player);
+        self->player = NULL;
+        return self;
+    }
     /* An unverified GTK GL framebuffer is never advertised as a native HDR sink.
      * Convert input SDR/HDR to a well-defined 8-bit BT.709/BT.1886 target.
      * A supplied display ICC profile may further refine SDR color conversion. */
@@ -482,9 +525,22 @@ mediakit_engine_new(void)
     mpv_observe_property(self->player, 0, "sub-visibility", MPV_FORMAT_FLAG);
     mpv_observe_property(self->player, 0, "hwdec-current", MPV_FORMAT_STRING);
     mpv_observe_property(self->player, 0, "video-params", MPV_FORMAT_NONE);
+    mpv_observe_property(self->player, 0, "audio-params", MPV_FORMAT_NONE);
+    mpv_observe_property(self->player, 0, "audio-out-params", MPV_FORMAT_NONE);
+    mpv_observe_property(self->player, 0, "current-tracks/audio/codec", MPV_FORMAT_NONE);
+    mpv_observe_property(self->player, 0, "audio-device", MPV_FORMAT_NONE);
+    mpv_observe_property(self->player, 0, "current-ao", MPV_FORMAT_NONE);
+    mpv_observe_property(self->player, 0, "audio-device-list", MPV_FORMAT_NONE);
     mpv_set_wakeup_callback(self->player, on_mpv_wakeup, self);
 #endif
     return self;
+}
+
+/** Maintains the pre-Stage-5 engine construction ABI with safe PCM defaults. */
+MediaKitEngine *
+mediakit_engine_new(void)
+{
+    return mediakit_engine_new_with_audio("auto", "", "auto-safe");
 }
 
 /** Queues a load and retains an asynchronous result until a file-loaded event arrives. */
@@ -859,6 +915,149 @@ mediakit_engine_get_video_color(MediaKitEngine *self)
     }
 #endif
     return g_variant_ref_sink(g_variant_builder_end(&metadata));
+}
+
+#ifdef MEDIAKIT_HAVE_MPV
+/** Reads a bounded string property without leaking libmpv-allocated memory. */
+static void
+add_audio_property(GVariantBuilder *dictionary, mpv_handle *player,
+                   const char *property, const char *name)
+{
+    char *value = mpv_get_property_string(player, property);
+    if (value == NULL) {
+        return;
+    }
+    gchar *safe = g_utf8_make_valid(value, strnlen(value, 4096));
+    g_variant_builder_add(dictionary, "{sv}", name, g_variant_new_string(safe));
+    g_free(safe);
+    mpv_free(value);
+}
+
+/** Adds only independently observed stream/output audio parameter fields. */
+static void
+add_audio_params(GVariantBuilder *dictionary, mpv_handle *player,
+                 const char *property, const char *prefix)
+{
+    mpv_node root = {0};
+    if (mpv_get_property(player, property, MPV_FORMAT_NODE, &root) < 0) {
+        return;
+    }
+    if (root.format == MPV_FORMAT_NODE_MAP) {
+        const char *keys[] = { "format", "channels", "channel-count", "samplerate" };
+        const char *suffix[] = { "format", "layout", "channels", "rate" };
+        for (guint index = 0; index < G_N_ELEMENTS(keys); index++) {
+            const mpv_node *value = find_node_member(&root, keys[index]);
+            if (value == NULL) {
+                continue;
+            }
+            gchar *name = g_strdup_printf("%s-%s", prefix, suffix[index]);
+            if (value->format == MPV_FORMAT_STRING) {
+                gchar *safe = node_safe_text(value);
+                g_variant_builder_add(dictionary, "{sv}", name, g_variant_new_string(safe));
+                g_free(safe);
+            } else if (value->format == MPV_FORMAT_INT64 && value->u.int64 >= 0) {
+                g_variant_builder_add(dictionary, "{sv}", name,
+                                      g_variant_new_int64(value->u.int64));
+            }
+            g_free(name);
+        }
+    }
+    mpv_free_node_contents(&root);
+}
+#endif
+
+/** Returns source and actual output metadata without claiming receiver capabilities. */
+GVariant *
+mediakit_engine_get_audio_information(MediaKitEngine *self)
+{
+    GVariantBuilder dictionary;
+    g_return_val_if_fail(MEDIAKIT_IS_ENGINE(self), NULL);
+    g_variant_builder_init(&dictionary, G_VARIANT_TYPE_VARDICT);
+#ifdef MEDIAKIT_HAVE_MPV
+    if (self->player != NULL && !self->closing) {
+        add_audio_property(&dictionary, self->player, "current-tracks/audio/codec", "source-codec");
+        add_audio_property(&dictionary, self->player, "audio-device", "device");
+        add_audio_property(&dictionary, self->player, "current-ao", "driver");
+        add_audio_params(&dictionary, self->player, "audio-params", "source");
+        add_audio_params(&dictionary, self->player, "audio-out-params", "output");
+    }
+#endif
+    return g_variant_ref_sink(g_variant_builder_end(&dictionary));
+}
+
+/** Enumerates mpv audio outputs; formats supported by each device are unknown. */
+GVariant *
+mediakit_engine_get_audio_devices(MediaKitEngine *self)
+{
+    GVariantBuilder devices;
+    g_return_val_if_fail(MEDIAKIT_IS_ENGINE(self), NULL);
+    g_variant_builder_init(&devices, G_VARIANT_TYPE("aa{sv}"));
+#ifdef MEDIAKIT_HAVE_MPV
+    mpv_node root = {0};
+    if (self->player != NULL && !self->closing &&
+        mpv_get_property(self->player, "audio-device-list", MPV_FORMAT_NODE, &root) >= 0) {
+        if (root.format == MPV_FORMAT_NODE_ARRAY) {
+            int count = MIN(root.u.list->num, 256);
+            for (int index = 0; index < count; index++) {
+                const mpv_node *item = &root.u.list->values[index];
+                if (item->format != MPV_FORMAT_NODE_MAP) {
+                    continue;
+                }
+                gchar *name = node_safe_text(find_node_member(item, "name"));
+                gchar *description = node_safe_text(find_node_member(item, "description"));
+                if (*name != '\0') {
+                    GVariantBuilder entry;
+                    g_variant_builder_init(&entry, G_VARIANT_TYPE_VARDICT);
+                    g_variant_builder_add(&entry, "{sv}", "id", g_variant_new_string(name));
+                    g_variant_builder_add(&entry, "{sv}", "description",
+                                          g_variant_new_string(description));
+                    g_variant_builder_add_value(&devices, g_variant_builder_end(&entry));
+                }
+                g_free(name);
+                g_free(description);
+            }
+        }
+        mpv_free_node_contents(&root);
+    }
+#endif
+    return g_variant_ref_sink(g_variant_builder_end(&devices));
+}
+
+/** Queues output-device selection; actual output is observed independently. */
+gboolean
+mediakit_engine_select_audio_device(MediaKitEngine *self,
+                                    const gchar *device_id,
+                                    GError **error)
+{
+    g_return_val_if_fail(MEDIAKIT_IS_ENGINE(self), FALSE);
+    if (device_id == NULL || *device_id == '\0' ||
+        strlen(device_id) > 256 || !g_utf8_validate(device_id, -1, NULL)) {
+        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT,
+                            "Invalid audio output device identifier");
+        return FALSE;
+    }
+    for (const gchar *cursor = device_id; *cursor != '\0'; cursor++) {
+        if ((guchar)*cursor < 32 || (guchar)*cursor == 127) {
+            g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT,
+                                "Audio output device ID contains a control character");
+            return FALSE;
+        }
+    }
+#ifdef MEDIAKIT_HAVE_MPV
+    if (self->player != NULL && !self->closing) {
+        char *value = (char *)device_id;
+        int status = mpv_set_property_async(self->player, 35, "audio-device",
+                                            MPV_FORMAT_STRING, &value);
+        if (status >= 0) {
+            return TRUE;
+        }
+        set_mpv_error(error, status, "Unable to select audio device");
+        return FALSE;
+    }
+#endif
+    g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NOT_INITIALIZED,
+                        "The playback engine is unavailable");
+    return FALSE;
 }
 
 /** Queues one validated track selection using libmpv's public property command. */

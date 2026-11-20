@@ -1,5 +1,8 @@
 core_sources = files(
+  'audio-device.vala',
   'audio-information.vala',
+  'audio-output-information.vala',
+  'audio-policy.vala',
   'media-capabilities.vala',
   'media-chapter.vala',
   'media-description.vala',

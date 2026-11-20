@@ -1,22 +1,25 @@
-# Public API and operation contracts — Stage 4 (0.4.0)
+# Public API and operation contracts — Stage 5 (0.5.0)
 
 ## Stability and types
 
 Public namespaces remain `MediaKit-1.0` and `MediaKitGtk-1.0`; SONAME 0 is
-pre-release. Version 0.4.0 is not an ABI-stable production release.
+pre-release. Version 0.5.0 is not an ABI-stable production release.
 
-| Type | Role | Behavior in Stage 4 |
+| Type | Role | Behavior in Stage 5 |
 | --- | --- | --- |
 | `MediaSource` | Local path or file/HTTP(S) URI | Construction does not touch disk/network |
 | `MediaSession` | Per-source playback Facade | Async load, transport, track/chapter control, seek, EOF, errors and buffering |
 | `OpenGlOutput` | GL renderer endpoint | One active renderer per engine, GL-context-affine |
 | `MediaCapabilities` | Verified/unknown output state | Engine availability from build; native HDR/audio output unverified |
 | `VideoColorInformation` | Typed source-only color/HDR descriptor | mpv `video-params` tokens, luminance and dynamic scene metadata if exposed |
+| `AudioInformation` | Source audio descriptor | Engine-observed codec, channel layout, rate, format; spatial UNKNOWN until proven |
+| `AudioOutputInformation` | Output audio descriptor | Reported output driver, format, channels, transport; no AVR guarantee |
+| `AudioDevice` | Output endpoint | Discovered ID/label, not a codec capability declaration |
 | `MediaProbe` | Future async media inspection | Still returns `ENGINE_UNAVAILABLE` |
 | `MediaDescription`, `MediaTrack`, `MediaChapter` | Metadata models | Live per-session tracks/chapters (standalone probe still reserved) |
-| `PlaybackOptions` | Audio/HDR/seek policy | Stored only; unsupported advanced choices not silently enabled |
+| `PlaybackOptions` | Audio/HDR/seek and output policy | Explicit PCM mixing, receiver-bound passthrough; unsupported requests rejected |
 | `MediaKitGtk.MediaView` | Video display | GTK GLArea + libmpv embedded OpenGL API, optional caller-provided ICC blob |
-| `MediaKitGtk.MediaControls` | Optional controls | Play, pause, stop, seek, video/audio/subtitle selection and chapters |
+| `MediaKitGtk.MediaControls` | Optional controls | Play, pause, stop, seek, media tracks, chapters and audio output |
 
 ## State and events
 
@@ -108,7 +111,7 @@ pre-release. Version 0.4.0 is not an ABI-stable production release.
 - Only one renderer is permitted per native engine, per libmpv API design.
 - Widget signal IDs are disconnected before their sessions are replaced.
 - Call all `MediaSession` mutators from its owning GLib context. Cross-thread
-  public remote control is not supported in Stage 4.
+  public remote control is not supported in Stage 5.
 
 ## Errors and capability claims
 
@@ -121,3 +124,29 @@ present, not that a particular output device/codec has been demonstrated.
 `native_hdr`, `encoded_audio` and `hdr_presentation` remain UNVERIFIED; Dolby
 Vision/Atmos/DTS:X or hardware GPU acceleration must not be claimed based on
 source tags or library availability alone.
+
+## Stage 5 audio interfaces
+
+`PlaybackOptions.audio_policy` defaults to `AUTO` (PCM; passthrough disabled).
+`pcm_channel_policy` defaults to `SYSTEM_DEFAULT`; `PRESERVE_SOURCE` requests
+`audio-channels=auto`. `audio_device_id` defaults to `auto` and
+`passthrough_codecs` defaults to `NONE`. `PREFER_PASSTHROUGH` requires an
+explicitly enumerated device ID (not `auto`) and a receiver-approved subset of
+`AC3`, `EAC3`, `TRUEHD`, `DTS` and `DTS_HD`. An unsupported policy is rejected
+before touching the current session. Options are copied at engine creation.
+
+`MediaSession.source_audio` returns decoded-source `AudioInformation` metadata:
+source codec, sample rate, channel count, channel layout and sample format.
+`MediaSession.audio_output` returns `AudioOutputInformation`: requested engine
+output device, active driver, output rate/layout/count and sample format.
+Its `AudioTransportState` reports `UNKNOWN`, `DECODED_PCM`, or
+`ENCODED_OBSERVED`. The latter describes **only libmpv's output sample format**.
+Receiver-specific formats and 3D audio object decoding remain unverified.
+
+`MediaSession.audio_devices` is a read-only `GListModel` of `AudioDevice`
+entries, including the `auto` default when a native session is open. Select a
+PCM endpoint via `select_audio_device(id)`; the command can be rejected later
+by libmpv and report `operation_failed`. In passthrough mode, switching to a
+new receiver is prohibited until the session is reopened with that receiver's
+approved codec allowlist. Events: `source_audio_changed`,
+`audio_output_changed`, and `audio_devices_changed`.

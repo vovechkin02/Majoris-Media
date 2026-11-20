@@ -1,6 +1,6 @@
-# Playback format targets and qualification — Stage 4
+# Playback format targets and qualification — Stage 5
 
-Stage 4 delegates format selection and decoding to the installed libmpv/FFmpeg
+Stage 5 delegates format selection and decoding to the installed libmpv/FFmpeg
 build. A codec being present upstream does **not** establish hardware decoder,
 GTK render, display HDR, object audio or receiver passthrough support.
 
@@ -55,3 +55,25 @@ chapters. It exercises list discovery, stream IDs, selection and chapter control
 when run with a real libmpv build. The PCM WAV smoke fixture remains. Neither
 fixture establishes HDR, hardware decoding, encoded passthrough or broad codec
 support.
+
+## Stage 5 audio implementation and exact guarantee boundaries
+
+| Stream family | PCM decoding | Encoded output | Object/spatial rendering |
+| --- | --- | --- | --- |
+| MP3/AAC/Opus/FLAC/ALAC/WAV | Decoder-dependent | Not requested | No object layer |
+| AC-3 (Dolby Digital) | Decoder-dependent | `ac3` with approved device | Channel based |
+| E-AC-3 (Dolby Digital Plus) | Decoder-dependent | `eac3` with approved device | Atmos not independently proven |
+| Dolby TrueHD | Decoder-dependent | `truehd` with approved device | Atmos not independently proven |
+| DTS core | Decoder-dependent | `dts` with approved device | Channel based |
+| DTS-HD MA/HR | Decoder-dependent | `dts-hd` with approved device | DTS:X not independently proven |
+
+No codec availability or channel-layout preservation is promised for arbitrary
+libmpv/FFmpeg builds. `audio-spdif` is an engine allowlist, **not** a PipeWire,
+ALSA or HDMI capability probe. A device may decline passthrough and cause PCM
+fallback or no audio. Where successful bitstream output is observed, external
+HDMI receiver decoding must still be verified independently.
+
+Two tiny, generated original audio fixtures provide representative 5.1 FLAC
+and E-AC-3 metadata. Neither carries Atmos/DTS:X object metadata. No
+proprietary encoders, receiver behavior, licensing keys or third-party tracks
+are embedded.
