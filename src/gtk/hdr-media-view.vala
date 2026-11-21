@@ -95,6 +95,9 @@ namespace MediaKitGtk {
                 }
                 var surface = native.get_surface ();
                 gl_context = surface.create_gl_context ();
+                // The native frame bridge validates storage with desktop OpenGL.
+                gl_context.set_allowed_apis (Gdk.GLAPI.GL);
+                gl_context.set_required_version (3, 2);
                 gl_context.realize ();
                 gl_context.make_current ();
                 frame_bridge = new MediaKitGtkNative.HdrFrame (gl_context);

@@ -12,7 +12,7 @@ def verify_sources(folder: str) -> list[str]:
     """Compare each library's Vala source files with its Meson source list."""
     root = ROOT / folder
     sources = set(re.findall(r"'([^']+\.vala)'", (root / "meson.build").read_text()))
-    expected = {str(file.relative_to(root)) for file in root.rglob("*.vala")}
+    expected = {file.relative_to(root).as_posix() for file in root.rglob("*.vala")}
     return [f"{folder}: Vala source list differs: missing={expected - sources}, extra={sources - expected}"] if sources != expected else []
 
 

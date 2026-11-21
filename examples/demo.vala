@@ -84,5 +84,9 @@ private class DemoApplication : Gtk.Application {
 
 /** Transfers process ownership to the GTK application lifecycle. */
 int main (string[] args) {
+    Intl.setlocale (LocaleCategory.ALL, "");
+    // libmpv requires the C numeric locale, including after GTK initializes.
+    Intl.setlocale (LocaleCategory.NUMERIC, "C");
+    Gtk.disable_setlocale ();
     return new DemoApplication ().run (args);
 }
